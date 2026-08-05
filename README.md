@@ -83,7 +83,7 @@ DisplayFX/
 
 To install DisplayFX using the Windows Setup Wizard:
 
-1. Download or locate `DisplayFX_Setup.exe` in `installer_output\`.
+1. Download `DisplayFX_Setup.exe`.
 2. Run `DisplayFX_Setup.exe`.
 3. Choose your desired installation folder (e.g. `C:\Program Files\DisplayFX` or a custom directory).
 4. Select optional tasks (Desktop shortcut, Windows autostart).
