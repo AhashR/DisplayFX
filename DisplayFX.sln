@@ -1,0 +1,21 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DisplayFX", "DisplayFX\DisplayFX.csproj", "{67FE0A57-27F9-4945-9A94-CEF4E6A12D4C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsDisplayAPI", "WindowsDisplayAPI-master\WindowsDisplayAPI\WindowsDisplayAPI.csproj", "{31C8D2A3-F61C-4FC6-B0B2-2F35B3CA2001}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{67FE0A57-27F9-4945-9A94-CEF4E6A12D4C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{67FE0A57-27F9-4945-9A94-CEF4E6A12D4C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{67FE0A57-27F9-4945-9A94-CEF4E6A12D4C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{67FE0A57-27F9-4945-9A94-CEF4E6A12D4C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{31C8D2A3-F61C-4FC6-B0B2-2F35B3CA2001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{31C8D2A3-F61C-4FC6-B0B2-2F35B3CA2001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{31C8D2A3-F61C-4FC6-B0B2-2F35B3CA2001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{31C8D2A3-F61C-4FC6-B0B2-2F35B3CA2001}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

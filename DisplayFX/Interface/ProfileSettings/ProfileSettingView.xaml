@@ -1,0 +1,225 @@
+<UserControl x:Class="DisplayFX.Interface.ProfileSettings.ProfileSettingView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:profileSettings="clr-namespace:DisplayFX.Interface.ProfileSettings"
+             mc:Ignorable="d"
+             d:DesignHeight="350" d:DesignWidth="360"
+             d:DataContext="{d:DesignInstance profileSettings:ProfileSettingViewModel}">
+    <Grid IsEnabled="{Binding CanEdit}" Margin="0,0,0,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="12" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Color Parameters Card -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderColorBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="14">
+            <StackPanel>
+                <TextBlock Text="Color parameters"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource AccentBlueBrush}"
+                           Margin="0,0,0,12" />
+
+                <!-- 1. Brightness -->
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="45" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Brightness"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center"
+                               FontSize="12" />
+                    <Slider Grid.Column="1"
+                            Orientation="Horizontal"
+                            Value="{Binding Brightness}"
+                            VerticalAlignment="Center"
+                            Minimum="0"
+                            Maximum="1"
+                            SmallChange=".01"
+                            LargeChange=".01" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Brightness, StringFormat=p0}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontWeight="Bold"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center"
+                               FontSize="12" />
+                </Grid>
+
+                <!-- 2. Contrast -->
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="45" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Contrast"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center"
+                               FontSize="12" />
+                    <Slider Grid.Column="1"
+                            Orientation="Horizontal"
+                            Value="{Binding Contrast}"
+                            VerticalAlignment="Center"
+                            Minimum="0"
+                            Maximum="1"
+                            SmallChange=".01"
+                            LargeChange=".01" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Contrast, StringFormat=p0}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontWeight="Bold"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center"
+                               FontSize="12" />
+                </Grid>
+
+                <!-- 3. Digital vibrance -->
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="45" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Digital vibrance"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center"
+                               FontSize="12" />
+                    <Slider Grid.Column="1"
+                            Orientation="Horizontal"
+                            Value="{Binding DigitalVibrance}"
+                            VerticalAlignment="Center"
+                            Minimum="0"
+                            Maximum="1"
+                            SmallChange=".01"
+                            LargeChange=".01" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding DigitalVibrance, StringFormat=p0}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontWeight="Bold"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center"
+                               FontSize="12" />
+                </Grid>
+
+                <!-- 4. Gamma -->
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="45" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Gamma"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center"
+                               FontSize="12" />
+                    <Slider Grid.Column="1"
+                            Orientation="Horizontal"
+                            Value="{Binding Gamma}"
+                            VerticalAlignment="Center"
+                            Minimum="0"
+                            Maximum="2.8"
+                            SmallChange=".01"
+                            LargeChange=".01" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Gamma, StringFormat=n2}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontWeight="Bold"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center"
+                               FontSize="12" />
+                </Grid>
+
+                <!-- Note -->
+                <TextBlock Text="💡 Tip: Extreme brightness and contrast levels can limit effective gamma range."
+                           FontSize="10.5"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- Triggers & Automation Card -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderColorBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="14">
+            <StackPanel>
+                <TextBlock Text="Auto-trigger &amp; shortcut"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource AccentBlueBrush}"
+                           Margin="0,0,0,12" />
+
+                <!-- Target app -->
+                <TextBlock Text="Target app"
+                           FontSize="12"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
+                           Margin="0,0,0,4" />
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Text="{Binding LinkedExecutablePath, UpdateSourceTrigger=LostFocus}"
+                             ToolTip="Select an application (.exe) to automatically activate this profile when launched"
+                             Background="{DynamicResource InputBackgroundBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderColorBrush}"
+                             Padding="6,4"
+                             VerticalAlignment="Center" />
+                    <Button Grid.Column="1"
+                            Content="Browse..."
+                            Style="{DynamicResource DarkThemeButtonStyle}"
+                            Margin="6,0,0,0"
+                            Command="{Binding BrowseExecutableCommand}"
+                            VerticalAlignment="Center" />
+                    <Button Grid.Column="2"
+                            Content="Clear"
+                            Style="{DynamicResource DarkThemeButtonStyle}"
+                            Margin="4,0,0,0"
+                            Command="{Binding ClearExecutableCommand}"
+                            VerticalAlignment="Center" />
+                </Grid>
+
+                <!-- Keyboard Shortcut Recorder Box -->
+                <TextBlock Text="Keyboard shortcut"
+                           FontSize="12"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
+                           Margin="0,0,0,4" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ToggleButton
+                        x:Name="HotkeyRecorderButton"
+                        IsChecked="{Binding IsRecordingHotkey, Mode=TwoWay}"
+                        Content="{Binding HotkeyDisplayText}"
+                        Style="{DynamicResource HotkeyRecorderButtonStyle}"
+                        PreviewKeyDown="HotkeyRecorderButton_PreviewKeyDown"
+                        HorizontalAlignment="Stretch"
+                        Height="32" />
+                    <Button Grid.Column="1"
+                            Content="Clear"
+                            Style="{DynamicResource DarkThemeButtonStyle}"
+                            Margin="6,0,0,0"
+                            Command="{Binding ClearHotkeyCommand}"
+                            VerticalAlignment="Center" />
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,77 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net7.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <Nullable>enable</Nullable>
+        <ApplicationIcon>Resources\desktop.ico</ApplicationIcon>
+        <UseWindowsForms>True</UseWindowsForms>
+        <AssemblyName>DisplayFX</AssemblyName>
+        <Product>DisplayFX</Product>
+        <AssemblyTitle>DisplayFX</AssemblyTitle>
+        <Description>DisplayFX</Description>
+        <Company>AhashR</Company>
+        <Authors>AhashR</Authors>
+        <AssemblyVersion>1.0.0.0</AssemblyVersion>
+        <FileVersion>1.0.0.0</FileVersion>
+        <Title>DisplayFX</Title>
+        <RepositoryUrl>https://github.com/AhashR/DisplayFX</RepositoryUrl>
+        <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <ServerGarbageCollection>false</ServerGarbageCollection>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Caliburn.Micro" Version="4.0.212" />
+        <PackageReference Include="FluentResults" Version="3.15.2" />
+        <PackageReference Include="MahApps.Metro" Version="2.4.10" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+        <PackageReference Include="NHotkey.Wpf" Version="4.0.0" />
+        <PackageReference Include="NLog" Version="5.2.7" />
+        <PackageReference Include="NvAPIWrapper.Net" Version="0.8.1.101" />
+        <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ApplicationDefinition Include="Bootstrap\App.xaml">
+            <Generator>MSBuild:Compile</Generator>
+            <XamlRuntime>Wpf</XamlRuntime>
+            <SubType>Designer</SubType>
+        </ApplicationDefinition>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Page Update="Interface\Shell\ShellView.xaml">
+            <Generator>MSBuild:Compile</Generator>
+            <XamlRuntime>Wpf</XamlRuntime>
+            <SubType>Designer</SubType>
+        </Page>
+        <Page Update="Resources\ResourceDictionaries\Resources.xaml">
+          <Generator>MSBuild:Compile</Generator>
+          <XamlRuntime>Wpf</XamlRuntime>
+          <SubType>Designer</SubType>
+        </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Remove="Data\Data.json" />
+        <Compile Include="Data\Data.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Compile>
+        <Resource Include="Resources\desktop.ico">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Resource>
+        <Resource Include="Resources\DB-Add.ico">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Resource>
+        <Resource Include="Resources\desktop.png">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Resource>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\WindowsDisplayAPI-master\WindowsDisplayAPI\WindowsDisplayAPI.csproj" />
+    </ItemGroup>
+
+</Project>

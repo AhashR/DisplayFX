@@ -1,0 +1,177 @@
+<mah:MetroWindow
+    x:Class="DisplayFX.Interface.Shell.ShellView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:cm="http://caliburnmicro.com"
+    xmlns:shell="clr-namespace:DisplayFX.Interface.Shell"
+    xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+    xmlns:converters="clr-namespace:DisplayFX.Global.Converters"
+    mc:Ignorable="d"
+    MinHeight="470"
+    MinWidth="650"
+    Width="660"
+    SizeToContent="Height"
+    WindowStartupLocation="CenterScreen"
+    ResizeMode="CanMinimize"
+    TitleCharacterCasing="Normal"
+    Title="DisplayFX"
+    Background="{DynamicResource WindowBackgroundBrush}"
+    GlowBrush="{x:Null}"
+    BorderThickness="1"
+    BorderBrush="{DynamicResource BorderColorBrush}"
+    d:DataContext="{d:DesignInstance shell:ShellViewModel}">
+    <mah:MetroWindow.Resources>
+        <converters:BooleanToVisibilityHiddenConverter x:Key="BooleanToVisibilityHiddenConverter" />
+    </mah:MetroWindow.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" /> <!-- Display Selector Bar -->
+            <RowDefinition Height="*" />    <!-- Dual-Pane Main Content -->
+            <RowDefinition Height="Auto" /> <!-- Footer Action Bar -->
+        </Grid.RowDefinitions>
+
+        <!-- 1. Display Selector Bar -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderColorBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="10,8"
+                Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Active display:"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,12,0" />
+                <ScrollViewer Grid.Column="1"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled"
+                              Focusable="False">
+                    <ItemsControl IsTabStop="False"
+                                  ItemsSource="{Binding Monitors, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <ContentControl cm:View.Model="{Binding}" IsTabStop="False" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" IsItemsHost="True" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- 2. Dual-Pane Main Content -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" /> <!-- Left Panel: Profiles -->
+                <ColumnDefinition Width="10" />  <!-- Separator -->
+                <ColumnDefinition Width="*" />   <!-- Right Panel: Settings -->
+            </Grid.ColumnDefinitions>
+
+            <!-- Left Panel: Applications & Profiles -->
+            <Border Grid.Column="0"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderColorBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding ProfileGroupBoxText}"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource AccentBlueBrush}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl IsTabStop="False"
+                                      ItemsSource="{Binding SelectedMonitor.Profiles, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <ContentControl cm:View.Model="{Binding}" IsTabStop="False" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <Button Name="AddProfile"
+                            Grid.Row="2"
+                            Visibility="{Binding CanAddProfile, Converter={StaticResource BooleanToVisibilityHiddenConverter}}"
+                            Style="{DynamicResource PrimaryAccentButtonStyle}"
+                            Content="New profile"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,8,0,0" />
+                </Grid>
+            </Border>
+
+            <!-- Right Panel: Profile Parameters & Triggers -->
+            <ContentControl Grid.Column="2"
+                            cm:View.Model="{Binding SelectedProfile.ProfileSettings}"
+                            IsTabStop="False" />
+        </Grid>
+
+        <!-- 3. Footer Action Bar -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderColorBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="12,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Button Name="OpenSettings"
+                        Grid.Column="0"
+                        Style="{DynamicResource DarkThemeButtonStyle}"
+                        Content="Settings"
+                        Padding="10,6"
+                        ToolTip="App settings"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center" />
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Name="Revert"
+                            IsEnabled="{Binding ProfileSettingsIsDirty}"
+                            Style="{DynamicResource DarkThemeButtonStyle}"
+                            Content="Revert"
+                            Width="85"
+                            Margin="0,0,8,0" />
+                    <Button Name="Apply"
+                            IsEnabled="{Binding CanApply}"
+                            Style="{DynamicResource DarkThemeButtonStyle}"
+                            Content="Apply"
+                            Width="85"
+                            Margin="0,0,8,0" />
+                    <Button Name="Update"
+                            IsEnabled="{Binding ProfileSettingsIsDirty}"
+                            Style="{DynamicResource PrimaryAccentButtonStyle}"
+                            Content="Save settings"
+                            Width="110" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</mah:MetroWindow>

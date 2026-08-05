@@ -1,0 +1,101 @@
+<UserControl x:Class="DisplayFX.Interface.Settings.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             Background="{DynamicResource WindowBackgroundBrush}"
+             Padding="18"
+             d:DesignWidth="460" d:DesignHeight="340">
+    <StackPanel Width="420">
+        <!-- Header -->
+        <TextBlock Text="App settings"
+                   FontSize="14"
+                   FontWeight="Bold"
+                   Foreground="{DynamicResource AccentBlueBrush}"
+                   Margin="0,0,0,16" />
+
+        <!-- Options Container Card -->
+        <Border Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderColorBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="16,12">
+            <StackPanel>
+
+                <!-- 1. Automatically open DisplayFX when your computer starts up -->
+                <CheckBox Style="{DynamicResource ToggleSwitchStyle}"
+                          IsChecked="{Binding IsStartWithWindows, Mode=TwoWay}"
+                          Margin="0,4,0,14">
+                    <TextBlock Text="Automatically open DisplayFX when your computer starts up"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap" />
+                </CheckBox>
+
+                <Border Height="1" Background="{DynamicResource BorderColorBrush}" Margin="0,0,0,14" />
+
+                <!-- 2. Start minimised -->
+                <CheckBox Style="{DynamicResource ToggleSwitchStyle}"
+                          IsChecked="{Binding IsStartMinimized, Mode=TwoWay}"
+                          Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="Start minimised"
+                                   FontSize="12"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Start DisplayFX in the background, out of your way."
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
+                </CheckBox>
+
+                <Border Height="1" Background="{DynamicResource BorderColorBrush}" Margin="0,0,0,14" />
+
+                <!-- 3. Minimise to system tray -->
+                <CheckBox Style="{DynamicResource ToggleSwitchStyle}"
+                          IsChecked="{Binding IsMinimizeToTray, Mode=TwoWay}"
+                          Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="Minimise to system tray"
+                                   FontSize="12"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Clicking X minimises DisplayFX instead of closing it completely."
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
+                </CheckBox>
+
+                <Border Height="1" Background="{DynamicResource BorderColorBrush}" Margin="0,0,0,14" />
+
+                <!-- 4. Auto-apply settings on app start -->
+                <CheckBox Style="{DynamicResource ToggleSwitchStyle}"
+                          IsChecked="{Binding IsApplySettingsOnStart, Mode=TwoWay}"
+                          Margin="0,0,0,4">
+                    <StackPanel>
+                        <TextBlock Text="Auto-apply settings on app start"
+                                   FontSize="12"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Automatically restore display color profiles when the app launches."
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
+                </CheckBox>
+
+            </StackPanel>
+        </Border>
+
+        <!-- Close Button -->
+        <Button Name="Close"
+                Style="{DynamicResource PrimaryAccentButtonStyle}"
+                HorizontalAlignment="Right"
+                Width="90"
+                Content="Done"
+                Margin="0,16,0,0" />
+    </StackPanel>
+</UserControl>

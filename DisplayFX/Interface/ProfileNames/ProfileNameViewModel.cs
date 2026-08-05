@@ -1,0 +1,38 @@
+using Caliburn.Micro;
+
+namespace DisplayFX.Interface.ProfileNames;
+
+public class ProfileNameViewModel : Screen
+{
+    private string _profileName = string.Empty;
+
+    public override string DisplayName
+    {
+        get => "New Profile Name";
+        set { }
+    }
+
+    public string ProfileName
+    {
+        get => _profileName;
+        set
+        {
+            if (value == _profileName) return;
+            _profileName = value;
+            NotifyOfPropertyChange();
+            NotifyOfPropertyChange(nameof(CanSave));
+        }
+    }
+
+    public bool CanSave => !string.IsNullOrEmpty(ProfileName);
+
+    public void Save()
+    {
+        TryCloseAsync(true);
+    }
+
+    public void Cancel()
+    {
+        TryCloseAsync(false);
+    }
+}
