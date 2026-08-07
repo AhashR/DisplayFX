@@ -25,7 +25,7 @@ public class DisplayController
             display.GammaRamp =
                 new DisplayGammaRamp(profileSetting.Brightness, profileSetting.Contrast, profileSetting.Gamma);
             if (nvidiaMonitor is not null)
-                nvidiaMonitor.DigitalVibranceControl.NormalizedLevel = profileSetting.DigitalVibrance - .3;
+                nvidiaMonitor.DigitalVibranceControl.NormalizedLevel = (profileSetting.DigitalVibrance * 2.0) - 1.0;
         }
         catch (Exception e)
         {

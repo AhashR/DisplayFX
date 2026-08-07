@@ -10,6 +10,8 @@
     Width="325"
     Height="300"
     TitleCharacterCasing="Normal"
+    Title="Help &amp; About"
+    Icon="pack://application:,,,/DisplayFX;component/Resources/desktop.png"
     WindowStartupLocation="CenterScreen"
     ResizeMode="NoResize"
     Background="{DynamicResource WindowBackgroundBrush}"

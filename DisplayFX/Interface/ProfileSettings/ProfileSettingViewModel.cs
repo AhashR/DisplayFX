@@ -33,7 +33,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
     public ProfileSetting ProfileSetting { get; }
 
     public bool IsDefault { get; }
-    public bool CanEdit => !IsDefault;
+    public bool CanEdit => true;
 
     public bool IsRecordingHotkey
     {

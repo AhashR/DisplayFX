@@ -17,6 +17,7 @@
     ResizeMode="CanMinimize"
     TitleCharacterCasing="Normal"
     Title="DisplayFX"
+    Icon="pack://application:,,,/DisplayFX;component/Resources/desktop.png"
     Background="{DynamicResource WindowBackgroundBrush}"
     GlowBrush="{x:Null}"
     BorderThickness="1"

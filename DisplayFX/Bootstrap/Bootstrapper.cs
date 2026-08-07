@@ -52,8 +52,17 @@ public class Bootstrapper : BootstrapperBase
 
     private const int SW_RESTORE = 9;
 
+    [DllImport("shell32.dll", SetLastError = true)]
+    private static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
+
     public Bootstrapper()
     {
+        try
+        {
+            SetCurrentProcessExplicitAppUserModelID("DisplayFX.App");
+        }
+        catch { }
+
         var services = new ServiceCollection();
         ConfigureServices(services);
         _serviceProvider = services.BuildServiceProvider();

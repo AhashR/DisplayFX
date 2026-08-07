@@ -14,25 +14,84 @@ using Application = System.Windows.Application;
 using System.Windows.Interop;
 using System.Windows.Input;
 
+using System.Windows.Media.Imaging;
+using System.Runtime.InteropServices;
+
 namespace DisplayFX.Interface.Shell;
 
 public partial class ShellView
 {
     private NotifyIcon? _notifyIcon;
 
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    private const int WM_SETICON = 0x0080;
+    private const int ICON_SMALL = 0;
+    private const int ICON_BIG = 1;
+
     public ShellView()
     {
         InitializeComponent();
+        SetWindowIcon();
         Start();
+    }
+
+    private void SetWindowIcon()
+    {
+        try
+        {
+            var pngUri = new Uri("pack://application:,,,/DisplayFX;component/Resources/desktop.png", UriKind.RelativeOrAbsolute);
+            Icon = BitmapFrame.Create(pngUri);
+        }
+        catch
+        {
+            try
+            {
+                var iconUri = new Uri("pack://application:,,,/DisplayFX;component/Resources/desktop.ico", UriKind.RelativeOrAbsolute);
+                Icon = BitmapFrame.Create(iconUri);
+            }
+            catch { }
+        }
     }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
 
+        var hwnd = new WindowInteropHelper(this).Handle;
+
         // add message handler to listen for messages from other instances of the app
-        HwndSource source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        HwndSource source = HwndSource.FromHwnd(hwnd);
         source.AddHook(WndProc);
+
+        ApplyNativeWindowIcon(hwnd);
+    }
+
+    private void ApplyNativeWindowIcon(IntPtr hwnd)
+    {
+        try
+        {
+            IntPtr hIcon = IntPtr.Zero;
+            var iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Resources", "desktop.ico");
+            if (System.IO.File.Exists(iconPath))
+            {
+                using var icon = new System.Drawing.Icon(iconPath);
+                hIcon = icon.Handle;
+            }
+            else
+            {
+                using var sysIcon = System.Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location);
+                if (sysIcon != null) hIcon = sysIcon.Handle;
+            }
+
+            if (hIcon != IntPtr.Zero)
+            {
+                SendMessage(hwnd, WM_SETICON, (IntPtr)ICON_SMALL, hIcon);
+                SendMessage(hwnd, WM_SETICON, (IntPtr)ICON_BIG, hIcon);
+            }
+        }
+        catch { }
     }
 
     private void Start()
