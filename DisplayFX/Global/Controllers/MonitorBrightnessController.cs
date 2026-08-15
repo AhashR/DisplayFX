@@ -13,6 +13,10 @@ namespace DisplayFX.Global.Controllers;
 /// </summary>
 public class MonitorBrightnessController
 {
+    /// <summary>VCP code for image luminance (backlight brightness).</summary>
+    private const byte BrightnessVcpCode = 0x10;
+
+    /// <summary>VCP code for the display power mode.</summary>
     private const byte DisplayPowerModeVcpCode = 0xD6;
 
     private readonly ILogger _logger;
@@ -24,8 +28,8 @@ public class MonitorBrightnessController
 
     /// <summary>
     ///     Reads the current backlight brightness (0-100) of the given display,
-    ///     normalized against the monitor's supported VCP range. Returns null when
-    ///     the monitor does not support DDC/CI brightness control.
+    ///     normalized against the monitor's reported VCP maximum. Returns null
+    ///     when the monitor does not expose DDC/CI brightness control.
     /// </summary>
     public int? GetBrightness(Display display)
     {
@@ -46,8 +50,9 @@ public class MonitorBrightnessController
             {
                 foreach (var physicalMonitor in physicalMonitors)
                 {
-                    if (GetMonitorBrightness(physicalMonitor.Handle, out var min, out var current, out var max))
-                        return NormalizeBrightness(min, current, max);
+                    if (GetVCPFeatureAndVCPFeatureReply(physicalMonitor.Handle, BrightnessVcpCode,
+                            IntPtr.Zero, out var current, out var max))
+                        return NormalizeBrightness(current, max);
                 }
             }
             finally
@@ -65,9 +70,9 @@ public class MonitorBrightnessController
 
     /// <summary>
     ///     Sets the hardware brightness (0-100) of the given display, scaling the
-    ///     value against the monitor's supported VCP range. Failures (e.g. monitors
-    ///     that don't support DDC/CI) are logged and ignored so they never block
-    ///     the rest of a profile from being applied.
+    ///     value against the monitor's reported VCP maximum. Failures (e.g.
+    ///     monitors that don't support DDC/CI) are logged and ignored so they
+    ///     never block the rest of a profile from being applied.
     /// </summary>
     public void SetBrightness(Display display, int brightness)
     {
@@ -99,13 +104,13 @@ public class MonitorBrightnessController
 
                 foreach (var physicalMonitor in physicalMonitors)
                 {
-                    // Try to resolve the monitor's real VCP range so the 0-100 value
-                    // maps correctly. Fall back to the raw value when unsupported.
+                    // Scale 0-100 to the monitor's real VCP range when it reports one.
                     var rawBrightness = targetBrightness;
-                    if (GetMonitorBrightness(physicalMonitor.Handle, out var min, out _, out var max))
-                        rawBrightness = ScaleBrightness(targetBrightness, min, max);
+                    if (GetVCPFeatureAndVCPFeatureReply(physicalMonitor.Handle, BrightnessVcpCode,
+                            IntPtr.Zero, out _, out var max) && max > 0)
+                        rawBrightness = ScaleBrightness(targetBrightness, max);
 
-                    if (SetMonitorBrightness(physicalMonitor.Handle, (uint)rawBrightness))
+                    if (SetVCPFeature(physicalMonitor.Handle, BrightnessVcpCode, (uint)rawBrightness))
                         return;
                 }
 
@@ -163,21 +168,21 @@ public class MonitorBrightnessController
         }
     }
 
-    private static int NormalizeBrightness(uint min, uint current, uint max)
+    private static int NormalizeBrightness(uint current, uint max)
     {
-        if (max <= min)
-            return (int)Math.Clamp(current, 0u, 100u);
+        // Some monitors report a maximum of 0; the DDC/CI convention is 0-100.
+        if (max == 0)
+            max = 100;
 
-        return (int)Math.Round((current - min) * 100.0 / (max - min));
+        return (int)Math.Clamp(Math.Round(current * 100.0 / max), 0, 100);
     }
 
-    private static int ScaleBrightness(int brightness, uint min, uint max)
+    private static int ScaleBrightness(int brightness, uint max)
     {
-        if (max <= min)
+        if (max == 0)
             return Math.Clamp(brightness, 0, 100);
 
-        var scaled = min + (max - min) * brightness / 100.0;
-        return (int)Math.Clamp(Math.Round(scaled), min, max);
+        return (int)Math.Clamp(Math.Round(brightness * max / 100.0), 0, max);
     }
 
     private static IntPtr GetMonitorHandle(Display display)
@@ -240,14 +245,11 @@ public class MonitorBrightnessController
     private static extern bool DestroyPhysicalMonitors(
         uint physicalMonitorArraySize, [Out] PhysicalMonitor[] physicalMonitorArray);
 
-    [DllImport("dxva2.dll", EntryPoint = "SetMonitorBrightness")]
+    [DllImport("dxva2.dll", EntryPoint = "GetVCPFeatureAndVCPFeatureReply")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetMonitorBrightness(IntPtr monitorHandle, uint newBrightness);
-
-    [DllImport("dxva2.dll", EntryPoint = "GetMonitorBrightness")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetMonitorBrightness(
-        IntPtr monitorHandle, out uint minimumBrightness, out uint currentBrightness, out uint maximumBrightness);
+    private static extern bool GetVCPFeatureAndVCPFeatureReply(
+        IntPtr monitorHandle, byte vcpCode, IntPtr vcpCodeType,
+        out uint currentValue, out uint maximumValue);
 
     [DllImport("dxva2.dll", EntryPoint = "SetVCPFeature")]
     [return: MarshalAs(UnmanagedType.Bool)]
