@@ -1,9 +1,11 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using Caliburn.Micro;
 using DisplayFX.Global.Controllers;
 using WindowsDisplayAPI;
+using WindowsDisplayAPI.DisplayConfig;
 
 namespace DisplayFX.Interface.BrightnessFlyout;
 
@@ -97,6 +99,22 @@ public class BrightnessMonitorViewModel : Screen
 
     private static string ResolveName(Display display)
     {
+        // Prefer the EDID-derived friendly name (e.g. "MSI MAG251RX"), the same
+        // source the main window uses when building its monitor list.
+        try
+        {
+            var target = PathDisplayTarget.GetDisplayTargets()
+                .FirstOrDefault(t =>
+                    string.Equals(t.DevicePath, display.DevicePath, StringComparison.OrdinalIgnoreCase));
+
+            if (target != null && !string.IsNullOrWhiteSpace(target.FriendlyName))
+                return target.FriendlyName;
+        }
+        catch
+        {
+            // Fall through to the next candidate.
+        }
+
         try
         {
             if (!string.IsNullOrWhiteSpace(display.DisplayName))
