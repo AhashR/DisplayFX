@@ -33,8 +33,8 @@ public class BrightnessMonitorViewModel : Screen
         Name = ResolveName(display);
 
         var current = brightnessController.GetBrightness(display);
-        SupportsBrightness = current.HasValue;
-        _brightness = current ?? 0;
+        SupportsBrightness = current.HasValue || brightnessController.SupportsBrightness(display);
+        _brightness = current ?? 50;
     }
 
     public Display Display { get; }

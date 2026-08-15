@@ -19,6 +19,9 @@ public class MonitorBrightnessController
     /// <summary>VCP code for the display power mode.</summary>
     private const byte DisplayPowerModeVcpCode = 0xD6;
 
+    /// <summary>MC_CAPS_BRIGHTNESS: the monitor reports DDC/CI brightness support.</summary>
+    private const uint MonitorCapabilitiesBrightness = 0x00000002;
+
     private readonly ILogger _logger;
 
     public MonitorBrightnessController(ILogger logger)
@@ -51,7 +54,7 @@ public class MonitorBrightnessController
                 foreach (var physicalMonitor in physicalMonitors)
                 {
                     if (GetVCPFeatureAndVCPFeatureReply(physicalMonitor.Handle, BrightnessVcpCode,
-                            IntPtr.Zero, out var current, out var max))
+                            out _, out var current, out var max))
                         return NormalizeBrightness(current, max);
                 }
             }
@@ -66,6 +69,48 @@ public class MonitorBrightnessController
         }
 
         return null;
+    }
+
+    /// <summary>
+    ///     Determines whether the display can have its backlight brightness
+    ///     controlled over DDC/CI, based on the monitor's reported capabilities.
+    ///     When the capabilities can't be determined the result defaults to true so
+    ///     displays that accept writes but fail reads remain adjustable.
+    /// </summary>
+    public bool SupportsBrightness(Display display)
+    {
+        if (display?.DisplayScreen == null)
+            return false;
+
+        try
+        {
+            var monitorHandle = GetMonitorHandle(display);
+            if (monitorHandle == IntPtr.Zero)
+                return true;
+
+            var physicalMonitors = GetPhysicalMonitors(monitorHandle);
+            if (physicalMonitors is null || physicalMonitors.Length == 0)
+                return false;
+
+            try
+            {
+                foreach (var physicalMonitor in physicalMonitors)
+                {
+                    if (GetMonitorCapabilities(physicalMonitor.Handle, out var capabilities, out _))
+                        return (capabilities & MonitorCapabilitiesBrightness) != 0;
+                }
+            }
+            finally
+            {
+                DestroyPhysicalMonitors((uint)physicalMonitors.Length, physicalMonitors);
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.Warn(e, "Failed to query brightness support for {0}.", display.DisplayName);
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -107,7 +152,7 @@ public class MonitorBrightnessController
                     // Scale 0-100 to the monitor's real VCP range when it reports one.
                     var rawBrightness = targetBrightness;
                     if (GetVCPFeatureAndVCPFeatureReply(physicalMonitor.Handle, BrightnessVcpCode,
-                            IntPtr.Zero, out _, out var max) && max > 0)
+                            out _, out _, out var max) && max > 0)
                         rawBrightness = ScaleBrightness(targetBrightness, max);
 
                     if (SetVCPFeature(physicalMonitor.Handle, BrightnessVcpCode, (uint)rawBrightness))
@@ -248,8 +293,13 @@ public class MonitorBrightnessController
     [DllImport("dxva2.dll", EntryPoint = "GetVCPFeatureAndVCPFeatureReply")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetVCPFeatureAndVCPFeatureReply(
-        IntPtr monitorHandle, byte vcpCode, IntPtr vcpCodeType,
+        IntPtr monitorHandle, byte vcpCode, out int vcpCodeType,
         out uint currentValue, out uint maximumValue);
+
+    [DllImport("dxva2.dll", EntryPoint = "GetMonitorCapabilities")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorCapabilities(
+        IntPtr monitorHandle, out uint monitorCapabilities, out uint supportedColorTemperatures);
 
     [DllImport("dxva2.dll", EntryPoint = "SetVCPFeature")]
     [return: MarshalAs(UnmanagedType.Bool)]
