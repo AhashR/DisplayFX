@@ -24,6 +24,8 @@ public partial class ShellView
 {
     private NotifyIcon? _notifyIcon;
     private BrightnessFlyoutView? _brightnessFlyout;
+    private int _trayLeftClickCount;
+    private System.Windows.Forms.Timer? _trayClickTimer;
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
@@ -164,20 +166,13 @@ public partial class ShellView
 
             _notifyIcon.Visible = true;
 
-            // left click toggles the Twinkle Tray-style brightness flyout,
-            // double click opens the main window
-            _notifyIcon.MouseClick += (s, e) =>
-            {
-                if (e.Button == MouseButtons.Left) ToggleBrightnessFlyout();
-            };
-            _notifyIcon.MouseDoubleClick += (s, e) =>
-            {
-                if (e.Button == MouseButtons.Left) DoShow();
-            };
+            // Count left clicks within the system double-click window:
+            // 1 = brightness flyout, 2 = main window, 3+ = exit.
+            _notifyIcon.MouseClick += OnNotifyIconMouseClick;
 
             _notifyIcon.ContextMenuStrip = new ContextMenuStrip();
-            _notifyIcon.ContextMenuStrip.Items.Add("Adjust Brightness", null, BrightnessEvent);
-            _notifyIcon.ContextMenuStrip.Items.Add("Show", null, OpenEvent);
+            _notifyIcon.ContextMenuStrip.Items.Add("Adjust brightness", null, BrightnessEvent);
+            _notifyIcon.ContextMenuStrip.Items.Add("Show menu", null, OpenEvent);
             _notifyIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             _notifyIcon.ContextMenuStrip.Items.Add("Exit", null, ExitEvent);
 
@@ -218,6 +213,43 @@ public partial class ShellView
     private void BrightnessEvent(object? sender, EventArgs args)
     {
         ShowBrightnessFlyout();
+    }
+
+    private void OnNotifyIconMouseClick(object? sender, System.Windows.Forms.MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left)
+            return;
+
+        _trayLeftClickCount++;
+
+        _trayClickTimer ??= new System.Windows.Forms.Timer
+        {
+            Interval = SystemInformation.DoubleClickTime + 50
+        };
+        _trayClickTimer.Stop();
+        _trayClickTimer.Tick -= OnTrayClickTimerTick;
+        _trayClickTimer.Tick += OnTrayClickTimerTick;
+        _trayClickTimer.Start();
+    }
+
+    private void OnTrayClickTimerTick(object? sender, EventArgs e)
+    {
+        _trayClickTimer?.Stop();
+
+        switch (_trayLeftClickCount)
+        {
+            case 1:
+                ToggleBrightnessFlyout();
+                break;
+            case 2:
+                DoShow();
+                break;
+            default:
+                ExitEvent(null, EventArgs.Empty);
+                break;
+        }
+
+        _trayLeftClickCount = 0;
     }
 
     private void ToggleBrightnessFlyout()

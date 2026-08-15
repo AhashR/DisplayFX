@@ -215,7 +215,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Adjust Brightness"
+                <TextBlock Text="Adjust brightness"
                            Foreground="#9BA1AA"
                            FontSize="11.5"
                            VerticalAlignment="Center" />

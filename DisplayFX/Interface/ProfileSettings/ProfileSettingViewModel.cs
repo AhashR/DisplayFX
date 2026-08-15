@@ -164,30 +164,6 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         }
     }
 
-    public bool UseHardwareBrightness
-    {
-        get => ProfileSetting.UseHardwareBrightness;
-        set
-        {
-            if (value == ProfileSetting.UseHardwareBrightness) return;
-            ProfileSetting.UseHardwareBrightness = value;
-            NotifyOfPropertyChange();
-            Publish();
-        }
-    }
-
-    public int HardwareBrightness
-    {
-        get => ProfileSetting.HardwareBrightness;
-        set
-        {
-            if (value == ProfileSetting.HardwareBrightness) return;
-            ProfileSetting.HardwareBrightness = value;
-            NotifyOfPropertyChange();
-            Publish();
-        }
-    }
-
     public Task HandleAsync(RevertEvent message, CancellationToken cancellationToken)
     {
         _resetting = true;
@@ -195,8 +171,6 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
             Brightness = _originalSettings.Brightness;
             Contrast = _originalSettings.Contrast;
             Gamma = _originalSettings.Gamma;
-            UseHardwareBrightness = _originalSettings.UseHardwareBrightness;
-            HardwareBrightness = _originalSettings.HardwareBrightness;
         }
         _resetting = false;
 
@@ -239,8 +213,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
     private void SetOriginalSettings(ProfileSetting profileSetting)
     {
         _originalSettings = new ProfileSetting(profileSetting.Brightness, profileSetting.Contrast,
-            profileSetting.Gamma, profileSetting.DigitalVibrance,
-            profileSetting.UseHardwareBrightness, profileSetting.HardwareBrightness);
+            profileSetting.Gamma, profileSetting.DigitalVibrance);
     }
 
     private void Publish(bool value = true)

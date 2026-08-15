@@ -12,8 +12,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="12" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="12" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Color Parameters Card -->
@@ -150,62 +148,8 @@
             </StackPanel>
         </Border>
 
-        <!-- Hardware Brightness Card -->
-        <Border Grid.Row="2"
-                Background="{DynamicResource CardBackgroundBrush}"
-                BorderBrush="{DynamicResource BorderColorBrush}"
-                BorderThickness="1"
-                CornerRadius="6"
-                Padding="14">
-            <StackPanel>
-                <TextBlock Text="Hardware brightness"
-                           FontSize="11"
-                           FontWeight="Bold"
-                           Foreground="{DynamicResource AccentBlueBrush}"
-                           Margin="0,0,0,8" />
-
-                <CheckBox Content="Adjust monitor brightness"
-                          IsChecked="{Binding UseHardwareBrightness}"
-                          Style="{DynamicResource ToggleSwitchStyle}"
-                          Margin="0,0,0,12" />
-
-                <Grid IsEnabled="{Binding UseHardwareBrightness}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="100" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="45" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Brightness"
-                               Foreground="{DynamicResource TextPrimaryBrush}"
-                               VerticalAlignment="Center"
-                               FontSize="12" />
-                    <Slider Grid.Column="1"
-                            Orientation="Horizontal"
-                            Value="{Binding HardwareBrightness}"
-                            VerticalAlignment="Center"
-                            Minimum="0"
-                            Maximum="100"
-                            SmallChange="1"
-                            LargeChange="5" />
-                    <TextBlock Grid.Column="2"
-                               Text="{Binding HardwareBrightness, StringFormat={}{0}%}"
-                               Foreground="{DynamicResource TextPrimaryBrush}"
-                               FontWeight="Bold"
-                               TextAlignment="Right"
-                               VerticalAlignment="Center"
-                               FontSize="12" />
-                </Grid>
-
-                <TextBlock Text="💡 Changes the monitor's physical backlight via DDC/CI (like Twinkle Tray). Requires a monitor and cable that support DDC/CI."
-                           TextWrapping="Wrap"
-                           FontSize="10.5"
-                           Foreground="{DynamicResource TextMutedBrush}"
-                           Margin="0,10,0,0" />
-            </StackPanel>
-        </Border>
-
         <!-- Triggers & Automation Card -->
-        <Border Grid.Row="4"
+        <Border Grid.Row="2"
                 Background="{DynamicResource CardBackgroundBrush}"
                 BorderBrush="{DynamicResource BorderColorBrush}"
                 BorderThickness="1"
