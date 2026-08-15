@@ -56,6 +56,9 @@ public class MonitorBrightnessController
                     if (GetVCPFeatureAndVCPFeatureReply(physicalMonitor.Handle, BrightnessVcpCode,
                             out _, out var current, out var max))
                         return NormalizeBrightness(current, max);
+
+                    if (GetMonitorBrightness(physicalMonitor.Handle, out var min, out var currentValue, out var maxValue))
+                        return NormalizeBrightness(min, currentValue, maxValue);
                 }
             }
             finally
@@ -149,7 +152,12 @@ public class MonitorBrightnessController
 
                 foreach (var physicalMonitor in physicalMonitors)
                 {
-                    // Scale 0-100 to the monitor's real VCP range when it reports one.
+                    // Prefer the high-level brightness API, which monitors like the
+                    // MSI MAG251RX accept even when raw VCP writes fail.
+                    if (SetMonitorBrightness(physicalMonitor.Handle, (uint)targetBrightness))
+                        return;
+
+                    // Fall back to a raw VCP 0x10 write, scaled to the monitor's range.
                     var rawBrightness = targetBrightness;
                     if (GetVCPFeatureAndVCPFeatureReply(physicalMonitor.Handle, BrightnessVcpCode,
                             out _, out _, out var max) && max > 0)
@@ -220,6 +228,14 @@ public class MonitorBrightnessController
             max = 100;
 
         return (int)Math.Clamp(Math.Round(current * 100.0 / max), 0, 100);
+    }
+
+    private static int NormalizeBrightness(uint min, uint current, uint max)
+    {
+        if (max <= min)
+            return (int)Math.Clamp(current, 0u, 100u);
+
+        return (int)Math.Clamp(Math.Round((current - min) * 100.0 / (max - min)), 0, 100);
     }
 
     private static int ScaleBrightness(int brightness, uint max)
@@ -300,6 +316,15 @@ public class MonitorBrightnessController
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetMonitorCapabilities(
         IntPtr monitorHandle, out uint monitorCapabilities, out uint supportedColorTemperatures);
+
+    [DllImport("dxva2.dll", EntryPoint = "GetMonitorBrightness")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorBrightness(
+        IntPtr monitorHandle, out uint minimumBrightness, out uint currentBrightness, out uint maximumBrightness);
+
+    [DllImport("dxva2.dll", EntryPoint = "SetMonitorBrightness")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetMonitorBrightness(IntPtr monitorHandle, uint newBrightness);
 
     [DllImport("dxva2.dll", EntryPoint = "SetVCPFeature")]
     [return: MarshalAs(UnmanagedType.Bool)]
