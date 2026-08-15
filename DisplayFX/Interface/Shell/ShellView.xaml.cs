@@ -25,6 +25,7 @@ public partial class ShellView
     private NotifyIcon? _notifyIcon;
     private BrightnessFlyoutView? _brightnessFlyout;
     private int _trayLeftClickCount;
+    private bool _flyoutWasOpenOnMouseDown;
     private System.Windows.Forms.Timer? _trayClickTimer;
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -168,6 +169,7 @@ public partial class ShellView
 
             // Count left clicks within the system double-click window:
             // 1 = brightness flyout, 2 = main window, 3+ = exit.
+            _notifyIcon.MouseDown += OnNotifyIconMouseDown;
             _notifyIcon.MouseClick += OnNotifyIconMouseClick;
 
             _notifyIcon.ContextMenuStrip = new ContextMenuStrip();
@@ -215,6 +217,16 @@ public partial class ShellView
         ShowBrightnessFlyout();
     }
 
+    private void OnNotifyIconMouseDown(object? sender, System.Windows.Forms.MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left)
+            return;
+
+        // Snapshot the flyout state before this click can deactivate (and
+        // thereby close) it, so the click handler can distinguish open vs close.
+        _flyoutWasOpenOnMouseDown = _brightnessFlyout is { IsVisible: true };
+    }
+
     private void OnNotifyIconMouseClick(object? sender, System.Windows.Forms.MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left)
@@ -222,6 +234,30 @@ public partial class ShellView
 
         _trayLeftClickCount++;
 
+        // Act immediately so the flyout opens on the very first click; the
+        // timer only resets the click count after the double-click window.
+        switch (_trayLeftClickCount)
+        {
+            case 1:
+                if (_flyoutWasOpenOnMouseDown)
+                    CloseBrightnessFlyout();
+                else
+                    ShowBrightnessFlyout();
+                break;
+            case 2:
+                CloseBrightnessFlyout();
+                DoShow();
+                break;
+            default:
+                ExitEvent(null, EventArgs.Empty);
+                return;
+        }
+
+        RestartTrayClickTimer();
+    }
+
+    private void RestartTrayClickTimer()
+    {
         _trayClickTimer ??= new System.Windows.Forms.Timer
         {
             Interval = SystemInformation.DoubleClickTime + 50
@@ -234,38 +270,25 @@ public partial class ShellView
 
     private void OnTrayClickTimerTick(object? sender, EventArgs e)
     {
+        // The multi-click window expired without another click, so the next
+        // click starts a fresh 1/2/3-click sequence.
         _trayClickTimer?.Stop();
-
-        switch (_trayLeftClickCount)
-        {
-            case 1:
-                ToggleBrightnessFlyout();
-                break;
-            case 2:
-                DoShow();
-                break;
-            default:
-                ExitEvent(null, EventArgs.Empty);
-                break;
-        }
-
         _trayLeftClickCount = 0;
-    }
-
-    private void ToggleBrightnessFlyout()
-    {
-        if (_brightnessFlyout is { IsVisible: true })
-        {
-            CloseBrightnessFlyout();
-            return;
-        }
-
-        ShowBrightnessFlyout();
     }
 
     private void ShowBrightnessFlyout()
     {
-        CloseBrightnessFlyout();
+        // Reuse the window if it is already on screen instead of stacking a
+        // second one on top of it.
+        if (_brightnessFlyout is { IsVisible: true })
+        {
+            _brightnessFlyout.Activate();
+            return;
+        }
+
+        // A previous flyout may still be finishing its close (click-away closes
+        // it through Deactivated); drop the stale reference before opening anew.
+        _brightnessFlyout = null;
 
         var viewModel = IoC.Get<BrightnessFlyoutViewModel>();
         viewModel.CloseRequested = CloseBrightnessFlyout;
@@ -287,11 +310,20 @@ public partial class ShellView
 
     private void CloseBrightnessFlyout()
     {
-        if (_brightnessFlyout == null)
+        var flyout = _brightnessFlyout;
+        _brightnessFlyout = null;
+
+        if (flyout is not { IsVisible: true })
             return;
 
-        _brightnessFlyout.Close();
-        _brightnessFlyout = null;
+        try
+        {
+            flyout.Close();
+        }
+        catch (InvalidOperationException)
+        {
+            // Already closing (e.g. Deactivated began the close) — nothing to do.
+        }
     }
 
     public void DoShow()
