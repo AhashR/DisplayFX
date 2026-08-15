@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
 
@@ -11,10 +12,13 @@ namespace DisplayFX.Interface.BrightnessFlyout;
 /// </summary>
 public partial class BrightnessFlyoutView : Window
 {
+    private bool _isClosing;
+
     public BrightnessFlyoutView()
     {
         InitializeComponent();
         ContentRendered += OnContentRendered;
+        Closing += OnClosing;
         Deactivated += OnDeactivated;
     }
 
@@ -23,9 +27,17 @@ public partial class BrightnessFlyoutView : Window
         PositionNearTaskbar();
     }
 
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        _isClosing = true;
+    }
+
     private void OnDeactivated(object? sender, EventArgs e)
     {
-        Close();
+        // Deactivation also fires while the window is already closing; guard
+        // against the re-entrant Close() that would otherwise throw.
+        if (!_isClosing)
+            Close();
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
