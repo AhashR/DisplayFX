@@ -10,6 +10,7 @@ using DisplayFX.Bootstrap;
 using DisplayFX.Global;
 using DisplayFX.Global.Controllers;
 using DisplayFX.Global.Extensions;
+using DisplayFX.Interface.BrightnessFlyout;
 using Application = System.Windows.Application;
 using System.Windows.Interop;
 using System.Windows.Input;
@@ -22,6 +23,7 @@ namespace DisplayFX.Interface.Shell;
 public partial class ShellView
 {
     private NotifyIcon? _notifyIcon;
+    private BrightnessFlyoutView? _brightnessFlyout;
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
@@ -162,12 +164,19 @@ public partial class ShellView
 
             _notifyIcon.Visible = true;
 
-            // show the window when left clicking the tray icon
-            _notifyIcon.MouseClick += (s, e) => { 
-                if (e.Button == MouseButtons.Left) DoShow(); 
+            // left click toggles the Twinkle Tray-style brightness flyout,
+            // double click opens the main window
+            _notifyIcon.MouseClick += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Left) ToggleBrightnessFlyout();
+            };
+            _notifyIcon.MouseDoubleClick += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Left) DoShow();
             };
 
             _notifyIcon.ContextMenuStrip = new ContextMenuStrip();
+            _notifyIcon.ContextMenuStrip.Items.Add("Adjust Brightness", null, BrightnessEvent);
             _notifyIcon.ContextMenuStrip.Items.Add("Show", null, OpenEvent);
             _notifyIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             _notifyIcon.ContextMenuStrip.Items.Add("Exit", null, ExitEvent);
@@ -204,6 +213,53 @@ public partial class ShellView
     private void OpenEvent(object? sender, EventArgs args)
     {
         DoShow();
+    }
+
+    private void BrightnessEvent(object? sender, EventArgs args)
+    {
+        ShowBrightnessFlyout();
+    }
+
+    private void ToggleBrightnessFlyout()
+    {
+        if (_brightnessFlyout is { IsVisible: true })
+        {
+            CloseBrightnessFlyout();
+            return;
+        }
+
+        ShowBrightnessFlyout();
+    }
+
+    private void ShowBrightnessFlyout()
+    {
+        CloseBrightnessFlyout();
+
+        var viewModel = IoC.Get<BrightnessFlyoutViewModel>();
+        viewModel.CloseRequested = CloseBrightnessFlyout;
+        viewModel.SettingsRequested = () =>
+        {
+            CloseBrightnessFlyout();
+            DoShow();
+            if (DataContext is ShellViewModel shellViewModel)
+                shellViewModel.OpenSettings();
+        };
+
+        var flyout = new BrightnessFlyoutView { DataContext = viewModel };
+        flyout.Closed += (_, _) => _brightnessFlyout = null;
+
+        _brightnessFlyout = flyout;
+        flyout.Show();
+        flyout.Activate();
+    }
+
+    private void CloseBrightnessFlyout()
+    {
+        if (_brightnessFlyout == null)
+            return;
+
+        _brightnessFlyout.Close();
+        _brightnessFlyout = null;
     }
 
     public void DoShow()

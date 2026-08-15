@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using NLog;
 using WindowsDisplayAPI;
@@ -12,6 +13,8 @@ namespace DisplayFX.Global.Controllers;
 /// </summary>
 public class MonitorBrightnessController
 {
+    private const byte DisplayPowerModeVcpCode = 0xD6;
+
     private readonly ILogger _logger;
 
     public MonitorBrightnessController(ILogger logger)
@@ -20,9 +23,51 @@ public class MonitorBrightnessController
     }
 
     /// <summary>
-    ///     Sets the hardware brightness (0-100) of the given display. Failures
-    ///     (e.g. monitors that don't support DDC/CI) are logged and ignored so
-    ///     they never block the rest of a profile from being applied.
+    ///     Reads the current backlight brightness (0-100) of the given display,
+    ///     normalized against the monitor's supported VCP range. Returns null when
+    ///     the monitor does not support DDC/CI brightness control.
+    /// </summary>
+    public int? GetBrightness(Display display)
+    {
+        if (display?.DisplayScreen == null)
+            return null;
+
+        try
+        {
+            var monitorHandle = GetMonitorHandle(display);
+            if (monitorHandle == IntPtr.Zero)
+                return null;
+
+            var physicalMonitors = GetPhysicalMonitors(monitorHandle);
+            if (physicalMonitors is null || physicalMonitors.Length == 0)
+                return null;
+
+            try
+            {
+                foreach (var physicalMonitor in physicalMonitors)
+                {
+                    if (GetMonitorBrightness(physicalMonitor.Handle, out var min, out var current, out var max))
+                        return NormalizeBrightness(min, current, max);
+                }
+            }
+            finally
+            {
+                DestroyPhysicalMonitors((uint)physicalMonitors.Length, physicalMonitors);
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.Warn(e, "Failed to read hardware brightness for {0}.", display.DisplayName);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     Sets the hardware brightness (0-100) of the given display, scaling the
+    ///     value against the monitor's supported VCP range. Failures (e.g. monitors
+    ///     that don't support DDC/CI) are logged and ignored so they never block
+    ///     the rest of a profile from being applied.
     /// </summary>
     public void SetBrightness(Display display, int brightness)
     {
@@ -50,11 +95,17 @@ public class MonitorBrightnessController
 
             try
             {
-                var targetBrightness = (uint)Math.Clamp(brightness, 0, 100);
+                var targetBrightness = Math.Clamp(brightness, 0, 100);
 
                 foreach (var physicalMonitor in physicalMonitors)
                 {
-                    if (SetMonitorBrightness(physicalMonitor.Handle, targetBrightness))
+                    // Try to resolve the monitor's real VCP range so the 0-100 value
+                    // maps correctly. Fall back to the raw value when unsupported.
+                    var rawBrightness = targetBrightness;
+                    if (GetMonitorBrightness(physicalMonitor.Handle, out var min, out _, out var max))
+                        rawBrightness = ScaleBrightness(targetBrightness, min, max);
+
+                    if (SetMonitorBrightness(physicalMonitor.Handle, (uint)rawBrightness))
                         return;
                 }
 
@@ -69,6 +120,64 @@ public class MonitorBrightnessController
         {
             _logger.Warn(e, "Failed to set hardware brightness for {0}.", display.DisplayName);
         }
+    }
+
+    /// <summary>
+    ///     Turns off the given displays using the DDC/CI display power mode VCP
+    ///     feature. Monitors wake again on mouse or keyboard input.
+    /// </summary>
+    public void TurnOffDisplays(IEnumerable<Display> displays)
+    {
+        foreach (var display in displays)
+            SetPowerState(display, 5); // 5 = power off
+    }
+
+    private void SetPowerState(Display display, uint powerState)
+    {
+        if (display?.DisplayScreen == null)
+            return;
+
+        try
+        {
+            var monitorHandle = GetMonitorHandle(display);
+            if (monitorHandle == IntPtr.Zero)
+                return;
+
+            var physicalMonitors = GetPhysicalMonitors(monitorHandle);
+            if (physicalMonitors is null || physicalMonitors.Length == 0)
+                return;
+
+            try
+            {
+                foreach (var physicalMonitor in physicalMonitors)
+                    SetVCPFeature(physicalMonitor.Handle, DisplayPowerModeVcpCode, powerState);
+            }
+            finally
+            {
+                DestroyPhysicalMonitors((uint)physicalMonitors.Length, physicalMonitors);
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.Warn(e, "Failed to change power state for {0}.", display.DisplayName);
+        }
+    }
+
+    private static int NormalizeBrightness(uint min, uint current, uint max)
+    {
+        if (max <= min)
+            return (int)Math.Clamp(current, 0u, 100u);
+
+        return (int)Math.Round((current - min) * 100.0 / (max - min));
+    }
+
+    private static int ScaleBrightness(int brightness, uint min, uint max)
+    {
+        if (max <= min)
+            return Math.Clamp(brightness, 0, 100);
+
+        var scaled = min + (max - min) * brightness / 100.0;
+        return (int)Math.Clamp(Math.Round(scaled), min, max);
     }
 
     private static IntPtr GetMonitorHandle(Display display)
@@ -134,4 +243,13 @@ public class MonitorBrightnessController
     [DllImport("dxva2.dll", EntryPoint = "SetMonitorBrightness")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetMonitorBrightness(IntPtr monitorHandle, uint newBrightness);
+
+    [DllImport("dxva2.dll", EntryPoint = "GetMonitorBrightness")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorBrightness(
+        IntPtr monitorHandle, out uint minimumBrightness, out uint currentBrightness, out uint maximumBrightness);
+
+    [DllImport("dxva2.dll", EntryPoint = "SetVCPFeature")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetVCPFeature(IntPtr monitorHandle, byte vcpCode, uint newValue);
 }

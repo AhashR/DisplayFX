@@ -15,6 +15,7 @@ using NvAPIWrapper;
 using DisplayFX.Global;
 using DisplayFX.Global.Controllers;
 using DisplayFX.Global.Extensions;
+using DisplayFX.Interface.BrightnessFlyout;
 using DisplayFX.Interface.Shell;
 using DisplayFX.Objects.Factories;
 using DisplayFX.Objects.Factories.Interfaces;
@@ -95,6 +96,7 @@ public class Bootstrapper : BootstrapperBase
         services.AddTransient<ISettingsViewModelFactory, SettingsViewModelFactory>();
 
         services.AddTransient<DisplayWindowManager>();
+        services.AddTransient<BrightnessFlyoutViewModel>();
         services.AddTransient<ShellViewModel>();
     }
 
