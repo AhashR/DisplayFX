@@ -28,6 +28,7 @@ It provides per-monitor display profile management, integration with NVIDIA GPU 
 
 - **Per-Monitor Profile Management**: Supports up to 5 customizable display profiles per connected monitor.
 - **NVIDIA Hardware Color Control**: Direct integration via `NvAPIWrapper` for hardware-level Digital Vibrance, Saturation, Gamma, Contrast, Brightness, and RGB channel tuning.
+- **Monitor Hardware Brightness**: Per-profile backlight brightness control over DDC/CI (the same mechanism as Twinkle Tray) for supported external monitors.
 - **Automated Profile Switching**: Link display profiles to target application executables (e.g. `cs2.exe`, `photoshop.exe`). Profiles automatically activate when the designated process enters the foreground and revert when focus changes.
 - **Global Keybindings**: Register global system hotkeys (`NHotkey.Wpf`) to switch display profiles instantly from any application.
 - **Startup and Persistence**: Configurable Windows registry startup (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) and automatic profile restoration on boot.

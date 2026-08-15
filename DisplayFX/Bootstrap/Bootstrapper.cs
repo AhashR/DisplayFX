@@ -79,6 +79,7 @@ public class Bootstrapper : BootstrapperBase
         services.AddSingleton<DisplayCache>();
         services.AddSingleton<ProcessController>();
         services.AddSingleton<RegistryController>();
+        services.AddSingleton<MonitorBrightnessController>();
         services.AddSingleton<DisplayController>();
         services.AddSingleton<DataController>();
 

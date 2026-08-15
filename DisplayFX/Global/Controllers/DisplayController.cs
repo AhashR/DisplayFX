@@ -10,11 +10,14 @@ public class DisplayController
 {
     private readonly ILogger _logger;
     private readonly DisplayWindowManager _windowManager;
+    private readonly MonitorBrightnessController _brightnessController;
 
-    public DisplayController(ILogger logger, DisplayWindowManager windowManager)
+    public DisplayController(ILogger logger, DisplayWindowManager windowManager,
+        MonitorBrightnessController brightnessController)
     {
         _logger = logger;
         _windowManager = windowManager;
+        _brightnessController = brightnessController;
     }
 
     public void UpdateColorSettings(Display display, ProfileSetting profileSetting,
@@ -36,5 +39,8 @@ public class DisplayController
 
             _windowManager.ShowMessageBox(message);
         }
+
+        if (profileSetting.UseHardwareBrightness)
+            _brightnessController.SetBrightness(display, profileSetting.HardwareBrightness);
     }
 }
