@@ -24,9 +24,7 @@ public partial class ShellView
 {
     private NotifyIcon? _notifyIcon;
     private BrightnessFlyoutView? _brightnessFlyout;
-    private int _trayLeftClickCount;
     private bool _flyoutWasOpenOnMouseDown;
-    private System.Windows.Forms.Timer? _trayClickTimer;
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
@@ -167,8 +165,7 @@ public partial class ShellView
 
             _notifyIcon.Visible = true;
 
-            // Count left clicks within the system double-click window:
-            // 1 = brightness flyout, 2 = main window, 3+ = exit.
+            // Left-click toggles the brightness flyout.
             _notifyIcon.MouseDown += OnNotifyIconMouseDown;
             _notifyIcon.MouseClick += OnNotifyIconMouseClick;
 
@@ -232,48 +229,11 @@ public partial class ShellView
         if (e.Button != MouseButtons.Left)
             return;
 
-        _trayLeftClickCount++;
-
-        // Act immediately so the flyout opens on the very first click; the
-        // timer only resets the click count after the double-click window.
-        switch (_trayLeftClickCount)
-        {
-            case 1:
-                if (_flyoutWasOpenOnMouseDown)
-                    CloseBrightnessFlyout();
-                else
-                    ShowBrightnessFlyout();
-                break;
-            case 2:
-                CloseBrightnessFlyout();
-                DoShow();
-                break;
-            default:
-                ExitEvent(null, EventArgs.Empty);
-                return;
-        }
-
-        RestartTrayClickTimer();
-    }
-
-    private void RestartTrayClickTimer()
-    {
-        _trayClickTimer ??= new System.Windows.Forms.Timer
-        {
-            Interval = SystemInformation.DoubleClickTime + 50
-        };
-        _trayClickTimer.Stop();
-        _trayClickTimer.Tick -= OnTrayClickTimerTick;
-        _trayClickTimer.Tick += OnTrayClickTimerTick;
-        _trayClickTimer.Start();
-    }
-
-    private void OnTrayClickTimerTick(object? sender, EventArgs e)
-    {
-        // The multi-click window expired without another click, so the next
-        // click starts a fresh 1/2/3-click sequence.
-        _trayClickTimer?.Stop();
-        _trayLeftClickCount = 0;
+        // A single left click simply toggles the brightness flyout.
+        if (_flyoutWasOpenOnMouseDown)
+            CloseBrightnessFlyout();
+        else
+            ShowBrightnessFlyout();
     }
 
     private void ShowBrightnessFlyout()
