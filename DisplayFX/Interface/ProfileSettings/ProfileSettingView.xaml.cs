@@ -35,4 +35,9 @@ public partial class ProfileSettingView : UserControl
             vm.SetRecordedHotkey(modifiers, key);
         }
     }
+
+    private void HotkeyRecorderButton_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (DataContext is ProfileSettingViewModel model) model.IsRecordingHotkey = false;
+    }
 }

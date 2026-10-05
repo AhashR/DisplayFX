@@ -28,7 +28,8 @@ public class MonitorViewModelFactory
     {
         try
         {
-            var display = _displayCache.GetDisplays().SingleOrDefault(d => d.DevicePath == monitor.DisplayDevicePath);
+            var display = _displayCache.GetDisplays().FirstOrDefault(d =>
+                string.Equals(d.DevicePath, monitor.DisplayDevicePath, StringComparison.OrdinalIgnoreCase));
             if (display is null)
                 return Result.Fail("Can't find display.");
 
@@ -46,6 +47,25 @@ public class MonitorViewModelFactory
         {
             _logger.Error(e);
             return Result.Fail("Can't find display.");
+        }
+    }
+
+    public bool Refresh(MonitorViewModel monitorViewModel)
+    {
+        try
+        {
+            var display = _displayCache.GetDisplays().FirstOrDefault(d =>
+                string.Equals(d.DevicePath, monitorViewModel.Monitor.DisplayDevicePath, StringComparison.OrdinalIgnoreCase));
+            if (display == null)
+                return false;
+
+            monitorViewModel.RefreshDisplay(display);
+            return true;
+        }
+        catch (Exception e)
+        {
+            _logger.Warn(e, "Could not refresh a monitor; retaining its saved profiles.");
+            return false;
         }
     }
 }

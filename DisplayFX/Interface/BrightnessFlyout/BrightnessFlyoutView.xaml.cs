@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 
@@ -13,6 +14,9 @@ namespace DisplayFX.Interface.BrightnessFlyout;
 public partial class BrightnessFlyoutView : Window
 {
     private bool _isClosing;
+    private bool _canClose;
+    private readonly TaskCompletionSource _closed = new();
+    public Task CloseCompletion => _closed.Task;
 
     public BrightnessFlyoutView()
     {
@@ -27,9 +31,28 @@ public partial class BrightnessFlyoutView : Window
         PositionNearTaskbar();
     }
 
-    private void OnClosing(object? sender, CancelEventArgs e)
+    private async void OnClosing(object? sender, CancelEventArgs e)
     {
+        if (_canClose) return;
+        e.Cancel = true;
+        if (_isClosing) return;
         _isClosing = true;
+        Hide();
+        try
+        {
+            if (DataContext is BrightnessFlyoutViewModel viewModel)
+            {
+                await viewModel.FlushPendingBrightnessAsync();
+                viewModel.Dispose();
+            }
+        }
+        finally { _canClose = true; _ = Dispatcher.BeginInvoke(new Action(Close)); }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _closed.TrySetResult();
+        base.OnClosed(e);
     }
 
     private void OnDeactivated(object? sender, EventArgs e)
@@ -66,4 +89,9 @@ public partial class BrightnessFlyoutView : Window
         if (DataContext is BrightnessFlyoutViewModel viewModel)
             viewModel.OpenSettings();
     }
+    private void OpenMainApp_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is BrightnessFlyoutViewModel viewModel) viewModel.OpenMainApp();
+    }
+
 }

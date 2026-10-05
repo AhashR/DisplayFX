@@ -1,4 +1,7 @@
+using System;
 using System.Dynamic;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Windows;
 using Caliburn.Micro;
 using FluentResults;
@@ -38,31 +41,34 @@ public class DisplayWindowManager
         WebsiteLauncher.OpenWebsite(urlString);
     }
 
-    public Result<string> OpenProfileNameViewModel()
+    public async Task<Result<string>> OpenProfileNameViewModel(string title = "New profile",
+        string initialName = "", IEnumerable<string>? existingNames = null)
     {
         var viewModel = _profileNameViewModelFactory.Create();
+        viewModel.Configure(title, initialName, existingNames);
         dynamic settings = new ExpandoObject();
-        settings.Title = "New profile";
+        settings.Title = title;
         settings.SizeToContent = SizeToContent.WidthAndHeight;
         settings.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         settings.ResizeMode = ResizeMode.NoResize;
         settings.GlowBrush = null;
 
-        var result = _windowManager.ShowDialogAsync(viewModel, null, settings);
-        return result.Result is true ? Result.Ok(viewModel.ProfileName) : Result.Fail("");
+        var result = await _windowManager.ShowDialogAsync(viewModel, null, settings);
+        return result is true ? Result.Ok(viewModel.ProfileName) : Result.Fail("");
     }
 
-    public void OpenSettings(Computer computer)
+    public async Task<string?> OpenSettings(Computer computer)
     {
         var viewModel = _settingsViewModelFactory.Create(computer);
         dynamic settings = new ExpandoObject();
-        settings.Title = "App settings";
+        settings.Title = "Settings";
+        settings.MaxHeight = Math.Max(320, SystemParameters.WorkArea.Height - 32);
         settings.SizeToContent = SizeToContent.WidthAndHeight;
         settings.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        settings.ResizeMode = ResizeMode.NoResize;
-        settings.GlowBrush = null;
+        settings.ResizeMode = ResizeMode.CanMinimize;
 
-        _windowManager.ShowDialogAsync(viewModel, null, settings);
+        await _windowManager.ShowDialogAsync(viewModel, null, settings);
+        return viewModel.RestoreFilePath;
     }
 
     public void ShowMessageBox(string message)

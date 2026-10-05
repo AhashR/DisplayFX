@@ -1,178 +1,105 @@
 # DisplayFX
 
-DisplayFX is a Windows WPF application designed for display profile management, hardware color calibration, and process-based profile switching.
+[Download the latest Windows installer](https://github.com/AhashR/DisplayFX/releases/latest).
 
-It provides per-monitor display profile management, integration with NVIDIA GPU hardware color controls (Digital Vibrance, Saturation, Gamma, Contrast, Brightness, RGB), global hotkey keybindings, and automatic profile switching based on foreground application execution.
+DisplayFX manages per-monitor color profiles and physical backlight brightness on Windows. Gamma-ramp brightness, contrast and gamma work with compatible display drivers; NVIDIA Digital Vibrance requires an NVIDIA GPU. Physical brightness controls require a monitor with DDC/CI enabled.
 
----
+## Using the app
 
-## Table of Contents
+- Select a monitor tab, then a profile. Create up to five profiles per monitor with **+**. Right-click a profile to duplicate, rename, export or remove it.
+- Adjust brightness, contrast, vibrance and gamma. The **play** icon applies a profile or previews edits, **undo** reverts edits, and **save** stores the draft. Profile shortcuts and executable links are optional; all edits remain isolated until saved. Use **Link application** to choose an executable. Its profile applies while that app is in the foreground, then the previously active profile returns when you leave it.
+- The toolbar provides **identify displays**, **refresh** and **settings**. Hover an icon for its label. Settings contains complete backup and restore. Restore merges profiles while retaining existing monitor identity, labels and remembered brightness; imports exceeding five profiles fail without changing settings.
+- Right-click a monitor tab to rename it. Disconnected displays retain profiles, and drafts survive reconnection during the same session.
+- Left-click the tray icon for brightness sliders. The **link** icon links their levels, **open app** opens the main DisplayFX screen, **power** turns displays off, and **gear** opens settings. Normal rows show only the monitor name, percentage and slider; errors appear as a small warning with details in its tooltip.
+- Brightness writes run outside the UI thread and coalesce rapid input to the latest requested value. Requests to one monitor are serialized and use its working API and cached range. Transient failed writes get one automatic retry. Closing the popup flushes pending input, and only successful writes are remembered. A sleeping or temporarily unreadable monitor keeps its last known level. Controls reconnect automatically after wake; a completely unknown level displays a dash instead of an invented 50%.
+- The main app and Settings use the standard Windows title bar: drag the title bar to move either window. Settings has a compact layout and no scrolling. Large daily-time lists use small pages. Optionally enable brightness shortcuts, set their step, and add daily `HH:mm` times and brightness levels. Save these controls with the save icon inside that section. Startup and tray preferences save immediately. Default shortcuts are Ctrl+Alt+Page Up / Page Down with a 10% step; shortcuts and schedules are off initially. After sleep, only the latest due scheduled level applies.
+- Shortcut conflicts appear beside the controls. Shortcuts are temporarily released while recording. Individual profile import is removed. Old executable links remain readable; transient app-switch state restores the manual profile on startup.
 
-- [Features](#features)
-- [Architecture and Tech Stack](#architecture-and-tech-stack)
-- [Repository Structure](#repository-structure)
-- [System Requirements](#system-requirements)
-- [Installation and Setup](#installation-and-setup)
-- [Building from Source](#building-from-source)
-- [Building the Windows Installer](#building-the-windows-installer)
-- [Configuration and Administration](#configuration-and-administration)
-  - [Data Storage](#data-storage)
-  - [Windows Autostart](#windows-autostart)
-  - [Foreground Process Monitoring](#foreground-process-monitoring)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
+## Requirements
 
----
+- Windows 10 or 11, x64.
+- For source builds, the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) with the Windows desktop runtime. `global.json` selects SDK 10.0.401 or a newer .NET 10 feature band.
+- The installer contains the .NET desktop runtime. No separate runtime installation is needed.
+- A compatible external monitor and enabled DDC/CI for physical brightness; an NVIDIA GPU for Digital Vibrance.
 
-## Features
+## Build and verify
 
-- **Per-Monitor Profile Management**: Supports up to 5 customizable display profiles per connected monitor.
-- **NVIDIA Hardware Color Control**: Direct integration via `NvAPIWrapper` for hardware-level Digital Vibrance, Saturation, Gamma, Contrast, Brightness, and RGB channel tuning.
-- **Monitor Hardware Brightness**: Per-profile backlight brightness control over DDC/CI (the same mechanism as Twinkle Tray) for supported external monitors.
-- **Automated Profile Switching**: Link display profiles to target application executables (e.g. `cs2.exe`, `photoshop.exe`). Profiles automatically activate when the designated process enters the foreground and revert when focus changes.
-- **Global Keybindings**: Register global system hotkeys (`NHotkey.Wpf`) to switch display profiles instantly from any application.
-- **Startup and Persistence**: Configurable Windows registry startup (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) and automatic profile restoration on boot.
-- **Process Isolation and Memory Optimization**: Single-instance mutex protection (`Global\DisplayFX_SingleInstance_Mutex`) and background memory trimming.
+From the repository root:
 
----
-
-## Architecture and Tech Stack
-
-| Component | Technology / Library | Description |
-| :--- | :--- | :--- |
-| **Framework** | .NET 7.0 (WPF), C# 11 | Core application framework |
-| **UI Pattern** | Caliburn.Micro | MVVM architecture and EventAggregator messaging |
-| **Dependency Injection** | Microsoft.Extensions.DependencyInjection | Inversion of Control container |
-| **UI Components** | MahApps.Metro | Modern WPF window styling and controls |
-| **Display Management** | WindowsDisplayAPI | Native Win32 CCD (Connecting and Configuring Displays) API wrapper |
-| **GPU API** | NvAPIWrapper | NVIDIA GPU API wrapper for color calibration and Digital Vibrance |
-| **Global Hotkeys** | NHotkey.Wpf | Windows global keybinding management |
-| **Logging** | NLog | Diagnostics and error logging |
-
----
-
-## Repository Structure
-
-```
-DisplayFX/
-├── DisplayFX.sln                         # Main Visual Studio Solution
-├── DisplayFX.iss                         # Inno Setup Script for generating Windows Installer
-├── build_installer.ps1                   # Automated installer build script
-├── DisplayFX/                            # Primary WPF Application Project
-│   ├── Bootstrap/                        # Application entry point, DI, single-instance mutex
-│   ├── Global/                           # System controllers (Data, Display, Process, Registry)
-│   ├── Interface/                        # Views and ViewModels (Shell, Monitors, Profiles, Settings)
-│   ├── Objects/                          # Domain entities, factories, and event handlers
-│   ├── Resources/                        # Application icons and WPF resource dictionaries
-│   └── Data/                             # Default data storage directory (Data.json)
-└── WindowsDisplayAPI-master/             # Sub-project library
-    └── WindowsDisplayAPI/                # Win32 display configuration wrapper library
+```powershell
+dotnet restore DisplayFX.sln
+dotnet build DisplayFX.sln -c Release
+dotnet run --project tests\DisplayFX.RegressionTests -c Release --no-build
 ```
 
----
+The regression harness uses fake displays and isolated settings files. Window-movement checks create transparent windows off screen, verify native title-bar hit testing and the Windows Move command, then verify a real position change; they do not move the pointer or operate the running app. It covers migration and recovery, draft isolation, backup validation and capacity, migration of removed switching metadata, hotkey conflicts, brightness range conversion, transport fallback, concurrent writes and rapid slider input, daily schedules, label persistence, topology metadata, native structure layouts, restart rollback, tray text limits, detached WPF rendering, slider interaction and asynchronous popup closure. It does not change physical monitor settings, write startup registry values, or launch the live app.
 
-## System Requirements
+To save view previews for layout inspection:
 
-- **Operating System**: Windows 10 or Windows 11 (64-bit)
-- **Architecture**: x64
-- **Graphics Hardware**: NVIDIA Graphics Processing Unit (Required for Digital Vibrance and hardware color controls)
-- **Runtime**: .NET 7.0 Desktop Runtime
+```powershell
+dotnet run --project tests\DisplayFX.RegressionTests -c Release --no-build -- --render-ui artifacts\ui
+```
 
----
+For optional read-only diagnostics on attached hardware:
 
-## Installation and Setup
+```powershell
+dotnet run --project tests\DisplayFX.RegressionTests -c Release --no-build -- --diagnose-brightness
+```
 
-To install DisplayFX using the Windows Setup Wizard:
+This separate mode reads brightness and the reported API ranges without changing display settings.
 
-1. Download `DisplayFX_Setup.exe`.
-2. Run `DisplayFX_Setup.exe`.
-3. Choose your desired installation folder (e.g. `C:\Program Files\DisplayFX` or a custom directory).
-4. Select optional tasks (Desktop shortcut, Windows autostart).
-5. Click **Install**.
+Run the application after building:
 
-The setup wizard will install the application, create Start Menu and Desktop shortcuts, register an uninstaller in Windows Control Panel, and launch the application.
+```powershell
+dotnet run --project DisplayFX\DisplayFX.csproj -c Release --no-build
+```
 
----
+Before releasing, verify physical DDC/CI commands, GPU color updates, global shortcuts, screen overlays and docking/undocking on supported hardware.
 
-## Building from Source
+## Build the installer
 
-### Prerequisites
-
-- [Visual Studio 2022](https://visualstudio.microsoft.com/) (with .NET desktop development workload) or [.NET 7.0 SDK](https://dotnet.microsoft.com/download/dotnet/7.0).
-
-### Build Steps
-
-1. Clone the repository:
-   ```cmd
-   git clone https://github.com/AhashR/DisplayFX.git
-   cd DisplayFX
-   ```
-
-2. Build the solution using the .NET CLI:
-   ```cmd
-   dotnet build DisplayFX.sln -c Release
-   ```
-
-3. Run the application:
-   ```cmd
-   dotnet run --project DisplayFX\DisplayFX.csproj
-   ```
-
----
-
-## Building the Windows Installer
-
-DisplayFX includes an Inno Setup script (`DisplayFX.iss`) and build script (`build_installer.ps1`) to generate a standalone Windows installer setup program.
-
-### Build Installer Command
-
-Run the PowerShell build script:
+Install Inno Setup 6 and run:
 
 ```powershell
 .\build_installer.ps1
 ```
 
-The script publishes the application binaries and invokes the Inno Setup compiler (`ISCC.exe`), producing the installer package:
-- Output Location: `installer_output\DisplayFX_Setup.exe`
+The script publishes fresh self-contained x64 binaries to a temporary staging directory, builds `artifacts\DisplayFX_Setup.exe`, and removes staging even on failure. It never packages local settings or stale binaries. Optional parameters:
 
----
-
-## Configuration and Administration
-
-### Data Storage
-
-User profiles, monitor configurations, hotkey bindings, and application links are stored in JSON format at:
-```
-<AppDirectory>\Data\Data.json
+```powershell
+.\build_installer.ps1 -DotNetPath 'C:\path\to\dotnet.exe' -InnoCompiler 'C:\path\to\ISCC.exe' -OutputDirectory 'D:\output'
 ```
 
-### Windows Autostart
+The installer offers an optional desktop shortcut. Start with Windows is controlled in the app rather than enabled by installation.
 
-Enabling **Start with Windows** creates a startup value in the Windows Registry:
-- **Registry Key**: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-- **Value Name**: `DisplayFX`
-- **Value Data**: `"C:\Path\To\DisplayFX.exe"`
+## Settings and recovery
 
-### Foreground Process Monitoring
+Settings live at `%LOCALAPPDATA%\DisplayFX\Data.json`. Saves are atomic and keep the previous save as `Data.json.bak`. A corrupt save with a valid backup is preserved as `Data.json.corrupt-<id>` before recovery. If neither file is readable, startup reports the error and preserves the files.
 
-DisplayFX inspects the active foreground window handle (`GetForegroundWindow`) at 1-second intervals. If the executable path matches a configured profile's `LinkedExecutablePath`, DisplayFX automatically applies the linked profile settings.
+The first launch imports a nonempty `<AppDirectory>\Data\Data.json` when no per-user save exists, leaving the legacy file intact. Newly detected monitors receive a default profile.
 
----
+App autostart uses `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\DisplayFX`. A session-local mutex prevents duplicate instances.
+
+## Repository
+
+- `DisplayFX/`: WPF app, MVVM views, entities, factories and controllers.
+- `WindowsDisplayAPI-master/WindowsDisplayAPI/`: vendored Win32 display wrapper with local correctness fixes.
+- `tests/DisplayFX.RegressionTests/`: hardware-independent regression harness.
+- `DisplayFX.sln`, `global.json`: solution and SDK selection.
+- `DisplayFX.iss`, `build_installer.ps1`: installer packaging.
+- `artifacts/`: ignored installers and optional view previews.
+
+Tracked binaries, old installers, unused store assets, empty configuration templates and Freebuff tracking files have been removed. Build output, editor state and local tool data are ignored. The display wrapper source and its original license remain part of the app.
+
+The app uses Caliburn.Micro, MahApps.Metro, Microsoft.Extensions.DependencyInjection, Newtonsoft.Json, NHotkey.Wpf, NLog and NvAPIWrapper.
 
 ## Troubleshooting
 
-#### Hardware Color Controls Not Applying
-- Verify that the target display is connected directly to an NVIDIA GPU.
-- Ensure official NVIDIA display drivers are installed and functioning.
-
-#### Automatic Profile Switching Fails for Elevated Processes
-- If a target application runs with elevated (Administrator) privileges, DisplayFX must also be executed as Administrator to inspect process metadata.
-
-#### Profile Data Reset
-- To reset application configuration to default settings, terminate DisplayFX and delete `<AppDirectory>\Data\Data.json`. DisplayFX will regenerate a clean configuration file upon next launch.
-
----
+- **Brightness unavailable:** enable DDC/CI in the monitor's menu, check the cable/dock, then reopen brightness controls. Some displays do not support physical brightness commands.
+- **Digital Vibrance unavailable:** verify the monitor is connected to a supported NVIDIA GPU and the driver is installed. Gamma and DDC/CI controls can also work with other GPUs.
+- **Shortcut unavailable:** choose another combination and save. Check both other DisplayFX profiles and other apps.
+- **Import fails:** select a version-1 DisplayFX settings backup. Invalid values, duplicate JSON properties, oversized files and capacity conflicts are rejected before committing.
 
 ## License
 
-This project includes `WindowsDisplayAPI` under its original license. All rights reserved.
+WindowsDisplayAPI retains its [original license](WindowsDisplayAPI-master/LICENSE). All rights reserved for DisplayFX.

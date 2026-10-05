@@ -2,10 +2,12 @@ namespace DisplayFX.Objects.Entities;
 
 public class ProfileSettingsEvent
 {
-    public ProfileSettingsEvent(bool isDirty)
+    public ProfileSettingsEvent(Profile profile, bool isDirty)
     {
+        Profile = profile;
         IsDirty = isDirty;
     }
 
-    public bool IsDirty { get; set; }
+    public Profile Profile { get; }
+    public bool IsDirty { get; }
 }

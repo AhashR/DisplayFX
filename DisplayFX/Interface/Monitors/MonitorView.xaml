@@ -9,19 +9,30 @@
              d:DesignHeight="36" d:DesignWidth="180" d:DataContext="{d:DesignInstance monitors:MonitorViewModel}">
     <ToggleButton
         Style="{DynamicResource SegmentedTabToggleButtonStyle}"
-        IsChecked="{Binding IsSelected}">
+        IsChecked="{Binding IsSelected}"
+        ToolTip="Right-click to give this monitor a custom name.">
+        <ToggleButton.ContextMenu>
+            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                <MenuItem Header="Rename monitor">
+                    <MenuItem StaysOpenOnClick="True">
+                        <MenuItem.Header>
+                            <StackPanel Width="230" Margin="2,4">
+                                <TextBlock Text="Custom monitor name" Margin="0,0,0,5" />
+                                <TextBox Text="{Binding CustomNameDraft, UpdateSourceTrigger=PropertyChanged}"
+                                         MaxLength="80" Margin="0,0,0,6" />
+                                <TextBlock Text="{Binding LabelError}" Foreground="#D95252" TextWrapping="Wrap" />
+                                <Button Content="Save name" Click="OnSaveNameClick" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </MenuItem.Header>
+                    </MenuItem>
+                </MenuItem>
+                <MenuItem Header="Use hardware name" Click="OnClearNameClick" />
+            </ContextMenu>
+        </ToggleButton.ContextMenu>
         <ToggleButton.Content>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock
-                    Text="{Binding Name, Mode=OneWay}"
-                    FontSize="12"
-                    VerticalAlignment="Center"
-                    Margin="0,0,6,0" />
-                <TextBlock
-                    Text="{Binding ResolutionText, Mode=OneWay}"
-                    FontSize="11"
-                    Opacity="0.85"
-                    VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE7F4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" MaxWidth="180" FontSize="12" ToolTip="{Binding ResolutionText}"/>
             </StackPanel>
         </ToggleButton.Content>
     </ToggleButton>

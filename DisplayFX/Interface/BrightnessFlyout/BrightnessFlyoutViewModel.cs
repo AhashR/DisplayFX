@@ -1,7 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Windows.Threading;
+using System.Threading.Tasks;
 using Caliburn.Micro;
 using DisplayFX.Global.Controllers;
 
@@ -15,17 +15,39 @@ namespace DisplayFX.Interface.BrightnessFlyout;
 public class BrightnessFlyoutViewModel : Screen
 {
     private readonly MonitorBrightnessController _brightnessController;
-    private readonly DisplayCache _displayCache;
+    private readonly BrightnessPersistenceController _persistence;
     private bool _isLinked;
+    private string? _linkStatus;
+    private readonly DisplayCache _displayCache;
+    private readonly MonitorTopologyController? _topology;
+    private bool _disposed;
+    private bool _refreshing;
 
-    public BrightnessFlyoutViewModel(MonitorBrightnessController brightnessController, DisplayCache displayCache)
+    public BrightnessFlyoutViewModel(
+        MonitorBrightnessController brightnessController,
+        DisplayCache displayCache,
+        BrightnessPersistenceController brightnessPersistenceController, MonitorTopologyController? topology = null)
     {
         _brightnessController = brightnessController;
+        _persistence = brightnessPersistenceController;
         _displayCache = displayCache;
+        _topology = topology;
+        _isLinked = brightnessPersistenceController.IsLinked;
+
+        // Re-enumerate when opening the flyout so disconnected monitors disappear
+        // and newly connected monitors have usable controls without restarting.
+        displayCache.Refresh();
 
         Monitors = new ObservableCollection<BrightnessMonitorViewModel>(
             displayCache.GetDisplays()
-                .Select(display => new BrightnessMonitorViewModel(display, brightnessController, OnMonitorBrightnessChanged)));
+                .Select(display => new BrightnessMonitorViewModel(
+                    display,
+                    brightnessController,
+                    OnMonitorBrightnessChanged,
+                    brightnessPersistenceController.Remember,
+                    brightnessPersistenceController.GetMonitorName(display), brightnessPersistenceController.GetRememberedBrightness(display))));
+        if (_topology != null) _topology.TopologyChanged += OnTopologyChanged;
+        brightnessController.DisplayPowerChanged += OnDisplayPowerChanged;
     }
 
     public ObservableCollection<BrightnessMonitorViewModel> Monitors { get; }
@@ -35,6 +57,8 @@ public class BrightnessFlyoutViewModel : Screen
     ///     the main window's settings dialog.
     /// </summary>
     public System.Action? SettingsRequested { get; set; }
+    public System.Action? MainAppRequested { get; set; }
+    public void OpenMainApp() => MainAppRequested?.Invoke();
 
     /// <summary>
     ///     Invoked when the flyout should close (e.g. after turning monitors off).
@@ -43,7 +67,7 @@ public class BrightnessFlyoutViewModel : Screen
 
     /// <summary>
     ///     When linked, changing one monitor's brightness moves all the others to
-    ///     the same value. Enabling the link normalizes every monitor first.
+    ///     the same value. Restoring the preference does not change monitor brightness.
     /// </summary>
     public bool IsLinked
     {
@@ -53,32 +77,81 @@ public class BrightnessFlyoutViewModel : Screen
             if (_isLinked == value)
                 return;
 
-            _isLinked = value;
+            try
+            {
+                _persistence.IsLinked = value;
+                _isLinked = value;
+                LinkStatus = null;
+            }
+            catch (Exception)
+            {
+                LinkStatus = "Could not save linked controls. Check access to your settings folder.";
+            }
             NotifyOfPropertyChange();
-
-            if (value)
-                NormalizeAcrossMonitors();
         }
     }
 
-    public void TurnOffMonitors()
+    public string? LinkStatus
+    {
+        get => _linkStatus;
+        private set { _linkStatus = value; NotifyOfPropertyChange(); }
+    }
+
+    public async void TurnOffMonitors()
     {
         var displays = Monitors.Select(monitor => monitor.Display).ToList();
+        await FlushPendingBrightnessAsync();
         CloseRequested?.Invoke();
-
-        // Let the flyout hide before the backlights switch off.
-        var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(350) };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            _brightnessController.TurnOffDisplays(displays);
-        };
-        timer.Start();
+        await Task.Delay(350);
+        await Task.Run(() => _brightnessController.TurnOffDisplays(displays));
     }
 
     public void OpenSettings()
     {
         SettingsRequested?.Invoke();
+    }
+
+    public Task FlushPendingBrightnessAsync() => Task.WhenAll(Monitors.Select(monitor => monitor.FlushPendingBrightnessAsync()));
+
+    public void Dispose()
+    {
+        _disposed = true;
+        if (_topology != null) _topology.TopologyChanged -= OnTopologyChanged;
+        if (_brightnessController != null) _brightnessController.DisplayPowerChanged -= OnDisplayPowerChanged;
+        foreach (var monitor in Monitors)
+            monitor.Dispose();
+    }
+
+    private async void OnTopologyChanged(object? sender, EventArgs args) => await RefreshDisplaysAsync();
+    private async void OnDisplayPowerChanged(bool awake)
+    {
+        if (awake) { await Task.Delay(600); await RefreshDisplaysAsync(); }
+    }
+    public async Task RefreshDisplaysAsync()
+    {
+        if (_disposed || _refreshing) return;
+        _refreshing = true;
+        try
+        {
+            // Enumerating after wake replaces stale logical monitor objects as well as their DDC ranges.
+            _displayCache.Refresh();
+            _brightnessController.InvalidateTransports();
+            var displays = _displayCache.GetDisplays();
+            foreach (var monitor in Monitors.ToList())
+            {
+                var display = displays.FirstOrDefault(display => string.Equals(display.DevicePath, monitor.Display.DevicePath, StringComparison.OrdinalIgnoreCase));
+                if (display != null) await monitor.RefreshBrightnessAsync(display);
+                if (_disposed) return;
+            }
+            foreach (var display in displays.Where(display => Monitors.All(row => !string.Equals(row.Display.DevicePath, display.DevicePath, StringComparison.OrdinalIgnoreCase))))
+            {
+                if (_disposed) return;
+                Monitors.Add(new BrightnessMonitorViewModel(display, _brightnessController, OnMonitorBrightnessChanged,
+                    _persistence.Remember, _persistence.GetMonitorName(display), _persistence.GetRememberedBrightness(display)));
+            }
+        }
+        catch (Exception) { LinkStatus = "Display controls reconnect automatically after wake."; }
+        finally { _refreshing = false; }
     }
 
     private void OnMonitorBrightnessChanged(BrightnessMonitorViewModel source, double value)
@@ -93,14 +166,4 @@ public class BrightnessFlyoutViewModel : Screen
         }
     }
 
-    private void NormalizeAcrossMonitors()
-    {
-        var supported = Monitors.Where(monitor => monitor.SupportsBrightness).ToList();
-        if (supported.Count < 2)
-            return;
-
-        var average = Math.Round(supported.Average(monitor => monitor.Brightness));
-        foreach (var monitor in supported)
-            monitor.ApplyBrightness(average);
-    }
 }

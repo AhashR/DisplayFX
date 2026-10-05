@@ -19,7 +19,8 @@ public static class WebsiteLauncher
         if (string.IsNullOrWhiteSpace(url))
             return;
 
-        if (!url.StartsWith("https://"))
+        if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
             url = url.Insert(0, "https://");
 
         if (!IsValidUri(url))

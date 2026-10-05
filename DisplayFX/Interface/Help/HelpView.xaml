@@ -76,7 +76,7 @@
                     Grid.Column="0"
                     Margin="5,0"
                     Foreground="{DynamicResource TextPrimaryBrush}"
-                    Text="Build: 1.0.0" />
+                    Text="{Binding VersionText}" />
                 <Grid
                     Grid.Row="1"
                     HorizontalAlignment="Left"

@@ -38,9 +38,16 @@ public class Display : DisplayDevice
         {
             var handle = DCHandle.CreateFromDevice(ScreenName, DevicePath);
 
-            if (!IsValid || handle?.IsInvalid != false) throw new InvalidDisplayException(DevicePath);
-
-            return new MonitorCapabilities(handle);
+            try
+            {
+                if (!IsValid || handle.IsInvalid) throw new InvalidDisplayException(DevicePath);
+                return new MonitorCapabilities(handle);
+            }
+            catch
+            {
+                handle.Dispose();
+                throw;
+            }
         }
     }
 
@@ -71,7 +78,7 @@ public class Display : DisplayDevice
     {
         get
         {
-            var handle = DCHandle.CreateFromDevice(ScreenName, DevicePath);
+            using var handle = DCHandle.CreateFromDevice(ScreenName, DevicePath);
 
             if (!IsValid || handle?.IsInvalid != false) throw new InvalidDisplayException(DevicePath);
 
@@ -83,7 +90,7 @@ public class Display : DisplayDevice
         }
         set
         {
-            var handle = DCHandle.CreateFromDevice(ScreenName, DevicePath);
+            using var handle = DCHandle.CreateFromDevice(ScreenName, DevicePath);
 
             if (!IsValid || handle?.IsInvalid != false) throw new InvalidDisplayException(DevicePath);
 

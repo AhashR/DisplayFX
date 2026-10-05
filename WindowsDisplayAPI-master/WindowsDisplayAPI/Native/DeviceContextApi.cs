@@ -79,7 +79,7 @@ namespace WindowsDisplayAPI.Native
 
         [DllImport("user32")]
         internal static extern IntPtr MonitorFromRect(
-            [In] RectangleL rectangle,
+            [In] ref RectangleL rectangle,
             MonitorFromFlag flag
         );
 

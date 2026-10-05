@@ -28,6 +28,9 @@ public class ProfileViewModel : Screen
 
     public Profile Profile { get; }
     public Action<Guid> ProfileRemoved { get; set; } = null!;
+    public Action<Guid>? ProfileDuplicateRequested { get; set; }
+    public Action<Guid>? ProfileRenameRequested { get; set; }
+    public Action<Guid>? ProfileExportRequested { get; set; }
     public string Name => Profile.Name;
     public Guid Guid { get; set; }
 
@@ -66,8 +69,7 @@ public class ProfileViewModel : Screen
             NotifyOfPropertyChange();
             if (_callEvent)
             {
-                BuildProfileSettings();
-                IsSelectedChanged.Invoke(Guid, value);
+                IsSelectedChanged?.Invoke(Guid, value);
             }
         }
     }
@@ -90,17 +92,16 @@ public class ProfileViewModel : Screen
             .Create(Profile.ProfileSetting, Profile.IsDefault, Profile);
     }
 
-    public void IsUpdated()
-    {
-        ProfileSettings?.IsUpdated();
-    }
-
     private void CreateContextMenu()
     {
+        ContextMenu = new ContextMenu();
+        AddMenuItem("Duplicate", () => ProfileDuplicateRequested?.Invoke(Guid));
+        AddMenuItem("Export profile...", () => ProfileExportRequested?.Invoke(Guid));
         if (Profile.IsDefault)
             return;
 
-        ContextMenu = new ContextMenu();
+        AddMenuItem("Rename...", () => ProfileRenameRequested?.Invoke(Guid));
+        ContextMenu.Items.Add(new Separator());
         var menuItem1 = new MenuItem
         {
             Header = "Remove"
@@ -109,9 +110,18 @@ public class ProfileViewModel : Screen
         ContextMenu.Items.Add(menuItem1);
     }
 
+    private void AddMenuItem(string header, System.Action action)
+    {
+        var item = new MenuItem { Header = header };
+        item.Click += (_, _) => action();
+        ContextMenu.Items.Add(item);
+    }
+
+    public void RefreshName() => NotifyOfPropertyChange(nameof(Name));
+
     private void OnRemoveClicked(object sender, RoutedEventArgs e)
     {
-        ProfileRemoved.Invoke(Guid);
+        ProfileRemoved?.Invoke(Guid);
     }
 
     public void Deactivate()
@@ -124,7 +134,6 @@ public class ProfileViewModel : Screen
         _callEvent = false;
         {
             IsSelected = false;
-            ProfileSettings = null;
         }
         _callEvent = true;
     }

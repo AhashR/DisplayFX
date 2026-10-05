@@ -121,8 +121,9 @@ namespace WindowsDisplayAPI
         /// <returns>An instance of <see cref="DisplayScreen" />.</returns>
         public static DisplayScreen FromRectangle(Rectangle rectangle)
         {
+            var nativeRectangle = new RectangleL(rectangle);
             var monitorHandle = DeviceContextApi.MonitorFromRect(
-                new RectangleL(rectangle),
+                ref nativeRectangle,
                 MonitorFromFlag.DefaultToNearest
             );
 

@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net7.0-windows</TargetFramework>
+        <TargetFramework>net10.0-windows</TargetFramework>
         <UseWPF>true</UseWPF>
         <Nullable>enable</Nullable>
         <ApplicationIcon>Resources\desktop.ico</ApplicationIcon>
@@ -13,8 +13,9 @@
         <Description>DisplayFX</Description>
         <Company>AhashR</Company>
         <Authors>AhashR</Authors>
-        <AssemblyVersion>1.0.0.0</AssemblyVersion>
-        <FileVersion>1.0.0.0</FileVersion>
+        <Version>2.1.0</Version>
+        <AssemblyVersion>$(Version).0</AssemblyVersion>
+        <FileVersion>$(Version).0</FileVersion>
         <Title>DisplayFX</Title>
         <RepositoryUrl>https://github.com/AhashR/DisplayFX</RepositoryUrl>
         <EnableWindowsTargeting>true</EnableWindowsTargeting>
@@ -25,12 +26,11 @@
         <PackageReference Include="Caliburn.Micro" Version="4.0.212" />
         <PackageReference Include="FluentResults" Version="3.15.2" />
         <PackageReference Include="MahApps.Metro" Version="2.4.10" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
         <PackageReference Include="NHotkey.Wpf" Version="4.0.0" />
         <PackageReference Include="NLog" Version="5.2.7" />
         <PackageReference Include="NvAPIWrapper.Net" Version="0.8.1.101" />
-        <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
     </ItemGroup>
 
     <ItemGroup>
@@ -55,14 +55,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Remove="Data\Data.json" />
-        <Compile Include="Data\Data.json">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Compile>
         <Resource Include="Resources\desktop.ico">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Resource>
-        <Resource Include="Resources\DB-Add.ico">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Resource>
         <Resource Include="Resources\desktop.png">

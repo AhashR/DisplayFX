@@ -6,10 +6,13 @@ namespace WindowsDisplayAPI.Native.DeviceContext
     internal class DCHandle : SafeHandle
     {
         private readonly bool _created;
+        private readonly IntPtr _windowHandle;
 
-        private DCHandle(IntPtr handle, bool created) : base(handle, true)
+        private DCHandle(IntPtr handle, bool created, IntPtr windowHandle = default) : base(IntPtr.Zero, true)
         {
+            SetHandle(handle);
             _created = created;
+            _windowHandle = windowHandle;
         }
 
         public override bool IsInvalid
@@ -20,7 +23,7 @@ namespace WindowsDisplayAPI.Native.DeviceContext
         public static DCHandle CreateFromDevice(string screenName, string devicePath)
         {
             return new DCHandle(
-                DeviceContextApi.CreateDC(screenName, devicePath, null, IntPtr.Zero),
+                DeviceContextApi.CreateDC(screenName, screenName, null, IntPtr.Zero),
                 true
             );
         }
@@ -34,7 +37,8 @@ namespace WindowsDisplayAPI.Native.DeviceContext
         {
             return new DCHandle(
                 DeviceContextApi.GetDC(windowHandle),
-                true
+                false,
+                windowHandle
             );
         }
 
@@ -50,7 +54,7 @@ namespace WindowsDisplayAPI.Native.DeviceContext
         {
             return _created
                 ? DeviceContextApi.DeleteDC(this.handle)
-                : DeviceContextApi.ReleaseDC(IntPtr.Zero, this.handle);
+                : DeviceContextApi.ReleaseDC(_windowHandle, this.handle);
         }
     }
 }

@@ -12,8 +12,6 @@ public class ProfileFactory
 
     public Profile Create(Monitor monitor, string name)
     {
-        var profile = new Profile(monitor, name, new ProfileSetting(0.5, 0.5, 1.0, 0.5), false);
-        monitor.Profiles.Add(profile);
-        return profile;
+        return new Profile(monitor, name, new ProfileSetting(0.5, 0.5, 1.0, 0.5), false);
     }
 }

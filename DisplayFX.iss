@@ -2,10 +2,13 @@
 ; Created for DisplayFX Windows Installer
 
 #define MyAppName "DisplayFX"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "2.1.0"
 #define MyAppPublisher "AhashR"
 #define MyAppURL "https://github.com/AhashR/DisplayFX"
 #define MyAppExeName "DisplayFX.exe"
+#ifndef MyAppSourceDir
+  #define MyAppSourceDir "DisplayFX\bin\Release\net10.0-windows\win-x64\publish"
+#endif
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.
@@ -18,13 +21,14 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
+ArchitecturesAllowed=x64compatible
 DisableDirPage=no
 DirExistsWarning=no
 AppendDefaultDirName=no
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=WindowsDisplayAPI-master\LICENSE
-OutputDir=installer_output
+OutputDir=artifacts
 OutputBaseFilename=DisplayFX_Setup
 SetupIconFile=DisplayFX\Resources\desktop.ico
 Compression=lzma2/ultra64
@@ -39,7 +43,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "app_files\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Legacy settings belong to the user and must survive upgrades for migration.
+Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Excludes: "\Data\*,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\Resources\desktop.ico"
