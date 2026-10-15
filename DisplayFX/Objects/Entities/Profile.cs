@@ -24,6 +24,8 @@ public class Profile
     public bool? IsActiveBeforeAutomaticSwitch { get; set; }
     public bool IsDefault { get; set; }
     public string? LinkedExecutablePath { get; set; }
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string? ImportedProfileName { get; set; }
 
     // Hotkey properties
     public ModifierKeys? HotkeyModifiers { get; set; }

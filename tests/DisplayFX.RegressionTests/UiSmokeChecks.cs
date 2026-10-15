@@ -52,7 +52,13 @@ internal static class UiSmokeChecks
             var profile = new Profile(monitor, "Default", new ProfileSetting(0.5, 0.5, 1, 0.5), true, true);
             monitor.Profiles.Add(profile);
             computer.Monitors.Add(monitor);
-            var settingsModel = new SettingsViewModel(computer, new RegistryController(), new DataController(temporary, temporary + ".json"));
+            var settingsData = new DataController(temporary, temporary + ".json");
+            var feedbackCache = new DisplayCache();
+            var feedbackHardware = new FixtureBrightness();
+            using var feedback = new BrightnessAutomationController(feedbackCache, feedbackHardware,
+                new BrightnessPersistenceController(settingsData, feedbackCache, feedbackHardware, NLog.LogManager.GetLogger("UiFeedback")),
+                NLog.LogManager.GetLogger("UiFeedback"));
+            var settingsModel = new SettingsViewModel(computer, new RegistryController(), settingsData, feedback);
             var settingsView = new SettingsView { DataContext = settingsModel };
             count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings");
             if (settingsView.WindowStyle != WindowStyle.SingleBorderWindow || Descendants<ScrollViewer>((FrameworkElement)settingsView.Content).Any(scroll => scroll.Content is Panel))
@@ -60,7 +66,23 @@ internal static class UiSmokeChecks
             if (((FrameworkElement)settingsView.Content).ActualHeight > 550)
                 throw new InvalidOperationException("Settings must fit within a compact screen height.");
             count++;
+
+            const string shortcutError = "Brightness shortcut is unavailable or used by another app. Choose another combination.";
+            typeof(BrightnessAutomationController).GetProperty(nameof(feedback.ShortcutError))!.SetValue(feedback, shortcutError);
+            typeof(BrightnessAutomationController).GetProperty(nameof(feedback.ShortcutStatus))!.SetValue(feedback, shortcutError);
+            typeof(BrightnessAutomationController).GetMethod("NotifyStatus", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(feedback, null);
+            count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings-shortcut-error");
+            var errorText = Descendants<TextBlock>((FrameworkElement)settingsView.Content).SingleOrDefault(text => text.Text == shortcutError);
+            if (errorText?.Visibility != Visibility.Visible || errorText.ActualHeight <= 0 || ((FrameworkElement)settingsView.Content).ActualHeight > 550)
+                throw new InvalidOperationException("Shortcut registration failures must be visible in the compact Settings layout.");
+            count++;
             for (var time = 0; time < 12; time++) settingsModel.BrightnessSchedules.Add(new() { Time = $"{time:00}:15", Brightness = 40 });
+            count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings-many-times-error");
+            if (((FrameworkElement)settingsView.Content).ActualHeight > 550)
+                throw new InvalidOperationException($"Shortcut errors and paged daily times must fit together without hiding controls (height: {((FrameworkElement)settingsView.Content).ActualHeight}).");
+            count++;
+            typeof(BrightnessAutomationController).GetProperty(nameof(feedback.ShortcutError))!.SetValue(feedback, null);
+            typeof(BrightnessAutomationController).GetMethod("NotifyStatus", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(feedback, null);
             count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings-many-times");
             if (settingsModel.VisibleSchedules.Count() != SettingsViewModel.SchedulePageSize || ((FrameworkElement)settingsView.Content).ActualHeight > 550)
                 throw new InvalidOperationException("Many daily times must remain accessible without growing or scrolling the settings window.");

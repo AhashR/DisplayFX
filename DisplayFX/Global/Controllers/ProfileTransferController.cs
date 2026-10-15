@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Windows.Input;
@@ -35,7 +36,7 @@ public static class ProfileTransferController
         for (var copy = 2; ; copy++)
         {
             var suffix = $" ({copy})";
-            var candidate = name.Substring(0, Math.Min(name.Length, MaximumNameLength - suffix.Length)) + suffix;
+            var candidate = GetCopyName(name, suffix);
             if (!monitor.Profiles.Any(profile => string.Equals(profile.Name, candidate, StringComparison.OrdinalIgnoreCase)))
                 return candidate;
         }
@@ -127,11 +128,13 @@ public static class ProfileTransferController
 
             foreach (var profile in source.Profiles)
             {
-                if (target.Profiles.Any(existing => ProfilesEquivalent(existing, profile)))
+                if (target.Profiles.Any(existing => ProfilesEquivalent(existing, profile, source.Profiles)))
                     continue;
                 if (target.Profiles.Count >= 5)
                     throw new InvalidDataException($"Import would exceed five profiles on {target.DisplayName}. Export or remove an unused profile, then retry.");
-                target.Profiles.Add(CloneProfile(profile, target, GetUniqueName(target, profile.Name), true));
+                var copy = CloneProfile(profile, target, GetUniqueName(target, profile.Name), true);
+                copy.ImportedProfileName = profile.Name;
+                target.Profiles.Add(copy);
             }
         }
 
@@ -150,8 +153,30 @@ public static class ProfileTransferController
         return clone;
     }
 
-    private static bool ProfilesEquivalent(Profile first, Profile second) =>
-        string.Equals(first.Name, second.Name, StringComparison.OrdinalIgnoreCase) &&
+    private static string GetCopyName(string name, string suffix) =>
+        name.Substring(0, Math.Min(name.Length, MaximumNameLength - suffix.Length)) + suffix;
+
+    private static bool IsImportedCopyName(string candidate, string sourceName)
+    {
+        var suffixStart = candidate.LastIndexOf(" (", StringComparison.Ordinal);
+        if (suffixStart < 0 || !candidate.EndsWith(')') ||
+            !int.TryParse(candidate.AsSpan(suffixStart + 2, candidate.Length - suffixStart - 3),
+                NumberStyles.None, CultureInfo.InvariantCulture, out var copy) || copy < 2)
+            return false;
+        var suffix = $" ({copy})";
+        return string.Equals(candidate, GetCopyName(sourceName, suffix), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ProfilesEquivalent(Profile first, Profile second, IReadOnlyList<Profile> importedProfiles) =>
+        ProfileValuesEquivalent(first, second) &&
+        (string.Equals(first.Name, second.Name, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(first.ImportedProfileName, second.Name, StringComparison.OrdinalIgnoreCase) ||
+         // Recognize copies made by older releases only when their truncated name is unambiguous.
+         first.ImportedProfileName == null && IsImportedCopyName(first.Name, second.Name) &&
+         !importedProfiles.Any(other => other != second && IsImportedCopyName(first.Name, other.Name) &&
+             ProfileValuesEquivalent(first, other)));
+
+    private static bool ProfileValuesEquivalent(Profile first, Profile second) =>
         first.ProfileSetting.Brightness == second.ProfileSetting.Brightness &&
         first.ProfileSetting.Contrast == second.ProfileSetting.Contrast &&
         first.ProfileSetting.Gamma == second.ProfileSetting.Gamma &&
@@ -174,6 +199,7 @@ public static class ProfileTransferController
         if (profile?.ProfileSetting == null)
             throw new InvalidDataException("A profile is missing its color settings.");
         ValidateName(profile.Name);
+        if (profile.ImportedProfileName != null) ValidateName(profile.ImportedProfileName);
         var settings = profile.ProfileSetting;
         ValidateRange(settings.Brightness, 0, 1, "brightness");
         ValidateRange(settings.Contrast, 0, 1, "contrast");

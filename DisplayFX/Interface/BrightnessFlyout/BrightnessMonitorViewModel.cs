@@ -178,11 +178,17 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
         _refreshing = true;
         try
         {
-            var current = await Task.Run(() => _brightnessController.GetBrightness(Display));
+            var (current, supported) = await Task.Run(() =>
+            {
+                var brightness = _brightnessController.GetBrightness(Display);
+                return (brightness, brightness.HasValue || _brightnessController.SupportsBrightness(Display));
+            });
             if (_disposed || _writeInFlight || _pendingBrightness.HasValue || _brightnessController.IsDisplaySleeping) return;
-            SupportsBrightness = current.HasValue;
+            SupportsBrightness = supported;
             HasError = !current.HasValue;
-            StatusMessage = current.HasValue ? "" : "Monitor is unavailable. Controls reconnect automatically when it wakes.";
+            StatusMessage = current.HasValue ? "" : supported
+                ? "Brightness cannot be read. You can still adjust this monitor."
+                : "Monitor is unavailable. Controls reconnect automatically when it wakes.";
             if (current.HasValue) { _brightness = current.Value; _hasKnownBrightness = true; }
             NotifyOfPropertyChange(nameof(SupportsBrightness));
             NotifyOfPropertyChange(nameof(Brightness));

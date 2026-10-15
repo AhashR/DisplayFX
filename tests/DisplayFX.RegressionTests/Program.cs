@@ -23,6 +23,7 @@ internal static class Program
             count += ProfileToolsRegressionChecks.Run();
             count += MonitorFeatureRegressionChecks.Run();
             count += BrightnessFeatureRegressionChecks.Run();
+            count += BugFixRegressionChecks.Run();
             count += UiSmokeChecks.Run(args.Length == 2 && args[0] == "--render-ui" ? args[1] : null);
             Console.WriteLine($"Passed {count} hardware-independent regression checks.");
             return 0;

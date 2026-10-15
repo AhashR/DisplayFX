@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Caliburn.Micro;
 using DisplayFX.Global.Controllers;
+using WindowsDisplayAPI;
 
 namespace DisplayFX.Interface.BrightnessFlyout;
 
@@ -12,7 +14,7 @@ namespace DisplayFX.Interface.BrightnessFlyout;
 ///     every connected display with a live brightness slider and supports linking
 ///     monitors, turning them off, and opening the app settings.
 /// </summary>
-public class BrightnessFlyoutViewModel : Screen
+public class BrightnessFlyoutViewModel : Screen, IDisposable
 {
     private readonly MonitorBrightnessController _brightnessController;
     private readonly BrightnessPersistenceController _persistence;
@@ -36,10 +38,10 @@ public class BrightnessFlyoutViewModel : Screen
 
         // Re-enumerate when opening the flyout so disconnected monitors disappear
         // and newly connected monitors have usable controls without restarting.
-        displayCache.Refresh();
+        var displays = GetConnectedDisplays();
 
         Monitors = new ObservableCollection<BrightnessMonitorViewModel>(
-            displayCache.GetDisplays()
+            displays
                 .Select(display => new BrightnessMonitorViewModel(
                     display,
                     brightnessController,
@@ -127,6 +129,12 @@ public class BrightnessFlyoutViewModel : Screen
     {
         if (awake) { await Task.Delay(600); await RefreshDisplaysAsync(); }
     }
+    private IReadOnlyList<Display> GetConnectedDisplays()
+    {
+        _displayCache.Refresh();
+        return _displayCache.GetDisplays();
+    }
+
     public async Task RefreshDisplaysAsync()
     {
         if (_disposed || _refreshing) return;
@@ -134,13 +142,17 @@ public class BrightnessFlyoutViewModel : Screen
         try
         {
             // Enumerating after wake replaces stale logical monitor objects as well as their DDC ranges.
-            _displayCache.Refresh();
+            var displays = GetConnectedDisplays();
             _brightnessController.InvalidateTransports();
-            var displays = _displayCache.GetDisplays();
             foreach (var monitor in Monitors.ToList())
             {
                 var display = displays.FirstOrDefault(display => string.Equals(display.DevicePath, monitor.Display.DevicePath, StringComparison.OrdinalIgnoreCase));
                 if (display != null) await monitor.RefreshBrightnessAsync(display);
+                else
+                {
+                    monitor.Dispose();
+                    Monitors.Remove(monitor);
+                }
                 if (_disposed) return;
             }
             foreach (var display in displays.Where(display => Monitors.All(row => !string.Equals(row.Display.DevicePath, display.DevicePath, StringComparison.OrdinalIgnoreCase))))

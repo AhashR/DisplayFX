@@ -8,12 +8,12 @@ public class DisplayCache
 {
     private IReadOnlyList<Display>? _cachedDisplays;
 
-    public IReadOnlyList<Display> GetDisplays()
+    public virtual IReadOnlyList<Display> GetDisplays()
     {
         return _cachedDisplays ??= Display.GetDisplays().ToList();
     }
 
-    public void Refresh()
+    public virtual void Refresh()
     {
         _cachedDisplays = Display.GetDisplays().ToList();
     }

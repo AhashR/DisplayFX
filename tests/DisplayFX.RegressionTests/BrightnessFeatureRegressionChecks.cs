@@ -104,21 +104,21 @@ internal static class BrightnessFeatureRegressionChecks
             Check(persistence.GetMonitorName(first) == "Desk", "Brightness rows must use saved custom monitor labels.");
             using var automation = new FakeAutomation(cache, hardware, persistence, logger, new[] { first, second });
             automation.Attach(computer);
-            automation.AdjustBrightness(15);
+            Pump(() => automation.AdjustBrightnessAsync(15));
             Check(hardware.Levels["first"] == 35 && hardware.Levels["second"] == 100, "Shortcuts must preserve relative levels and clamp at 100.");
             Check(monitor.LastBrightness == 35 && other.LastBrightness == 100, "Only successful shortcut writes must be remembered.");
-            automation.AdjustBrightness(int.MinValue);
+            Pump(() => automation.AdjustBrightnessAsync(int.MinValue));
             Check(hardware.Levels.Values.All(level => level == 0), "Large negative steps cannot overflow.");
             hardware.FailReads.Add("first");
             var writes = hardware.Writes;
-            automation.AdjustBrightness(10);
+            Pump(() => automation.AdjustBrightnessAsync(10));
             Check(hardware.Writes == writes + 1 && hardware.Levels["first"] == 0 && hardware.Levels["second"] == 10,
                 "A failed read must skip that monitor instead of guessing its level.");
             Check(automation.Status.Contains("1 failed"), "Automation failures must offer a retry route.");
             hardware.FailReads.Clear();
             automation.Detach();
             writes = hardware.Writes;
-            automation.AdjustBrightness(50);
+            Pump(() => automation.AdjustBrightnessAsync(50));
             Check(hardware.Writes == writes, "Detached automation must not write hardware during reset.");
 
             using (var row = new BrightnessMonitorViewModel(first, hardware, brightnessApplied: persistence.Remember, name: "Desk"))
@@ -163,12 +163,14 @@ internal static class BrightnessFeatureRegressionChecks
                 row.ApplyBrightness(double.NaN);
                 Check(row.Brightness == 40, "Invalid linked slider values must be ignored.");
                 hardware.FailReads.Add("first");
+                hardware.FailSupport.Add("first");
                 Pump(() => row.RefreshBrightnessAsync());
                 Check(row.Brightness == 40 && row.BrightnessText == "40%" && !row.SupportsBrightness,
                     "An unavailable monitor must retain its last known value instead of guessing 50%.");
                 using (var sleepingRow = new BrightnessMonitorViewModel(first, hardware, name: "Sleeping"))
                     Check(sleepingRow.Brightness == 40, "Reopening after a failed read must reuse the last successful hardware value.");
                 hardware.FailReads.Clear();
+                hardware.FailSupport.Clear();
                 hardware.Levels["first"] = 30;
                 Pump(() => row.RefreshBrightnessAsync(new FakeDisplay("first")));
                 Check(row.SupportsBrightness && !row.HasError && row.Brightness == 30,
@@ -239,11 +241,12 @@ internal static class BrightnessFeatureRegressionChecks
         public FakeBrightness() : base(LogManager.GetLogger("FakeBrightness")) { }
         public readonly Dictionary<string, int> Levels = new(StringComparer.OrdinalIgnoreCase);
         public readonly HashSet<string> FailReads = new(StringComparer.OrdinalIgnoreCase);
+        public readonly HashSet<string> FailSupport = new(StringComparer.OrdinalIgnoreCase);
         public bool FailWrites;
         public int FailNextWrites;
         public Action? BeforeWrite;
         public int Writes;
-        public override bool SupportsBrightness(Display display) => true;
+        public override bool SupportsBrightness(Display display) => !IsDisplaySleeping && !FailSupport.Contains(display.DevicePath);
         public override int? GetBrightness(Display display)
         {
             int? value = FailReads.Contains(display.DevicePath) ? null : Levels[display.DevicePath];

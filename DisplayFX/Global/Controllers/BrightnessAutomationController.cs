@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Threading;
 using DisplayFX.Objects.Entities;
@@ -24,6 +26,12 @@ public class BrightnessAutomationController : IDisposable
     private bool _started;
     private bool _hotkeysSuspended;
     private DateTime _lastScheduleCheck;
+    private readonly Dispatcher _dispatcher;
+    private readonly LinkedList<AutomationRequest> _pendingRequests = new();
+    private Task _worker = Task.CompletedTask;
+    private bool _processingRequests;
+    private int _operationVersion;
+    private sealed record AutomationRequest(long? Delta, int? Brightness, string Source, DateTime? ScheduleSince = null);
 
     public BrightnessAutomationController(DisplayCache displayCache, MonitorBrightnessController brightnessController,
         BrightnessPersistenceController persistence, ILogger logger)
@@ -32,16 +40,20 @@ public class BrightnessAutomationController : IDisposable
         _brightnessController = brightnessController;
         _persistence = persistence;
         _logger = logger;
+        _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
     }
 
     public event Action? StatusChanged;
     public string Status { get; private set; } = "Brightness automation is off.";
     public string ShortcutStatus { get; private set; } = "Brightness shortcuts are off.";
+    public string? ShortcutError { get; private set; }
+    protected virtual DateTime LocalNow => DateTime.Now;
 
     public void Attach(Computer computer)
     {
         Stop();
         _computer = computer;
+        ShortcutError = null;
     }
 
     public void Detach()
@@ -55,7 +67,8 @@ public class BrightnessAutomationController : IDisposable
         if (_started || _computer is null)
             return;
         _started = true;
-        _lastScheduleCheck = DateTime.Now;
+        _lastScheduleCheck = LocalNow;
+        _brightnessController.DisplayPowerChanged += OnDisplayPowerChanged;
         _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(15) };
         _timer.Tick += OnTimerTick;
         _timer.Start();
@@ -66,6 +79,9 @@ public class BrightnessAutomationController : IDisposable
     public void Stop()
     {
         _started = false;
+        _brightnessController.DisplayPowerChanged -= OnDisplayPowerChanged;
+        Interlocked.Increment(ref _operationVersion);
+        _pendingRequests.Clear();
         if (_timer is not null)
         {
             _timer.Stop();
@@ -87,7 +103,10 @@ public class BrightnessAutomationController : IDisposable
     public void SettingsChanged()
     {
         // Starting/enabling or editing a schedule never applies a past occurrence.
-        _lastScheduleCheck = DateTime.Now;
+        _lastScheduleCheck = LocalNow;
+        Interlocked.Increment(ref _operationVersion);
+        _pendingRequests.Clear();
+        ShortcutError = null;
         UpdateScheduleStatus();
         RefreshHotkeys();
     }
@@ -97,13 +116,14 @@ public class BrightnessAutomationController : IDisposable
         RemoveHotkeys();
         if (_computer is null || !_computer.IsBrightnessShortcutsEnabled)
         {
+            ShortcutError = null;
             ShortcutStatus = "Brightness shortcuts are off.";
             NotifyStatus();
             return;
         }
         if (!_started || _hotkeysSuspended)
         {
-            ShortcutStatus = _hotkeysSuspended ? "Shortcuts paused while settings are open." : "Shortcuts will activate when the app is ready.";
+            ShortcutStatus = ShortcutError ?? (_hotkeysSuspended ? "Shortcuts paused while settings are open." : "Shortcuts will activate when the app is ready.");
             NotifyStatus();
             return;
         }
@@ -112,7 +132,7 @@ public class BrightnessAutomationController : IDisposable
         var decreaseError = GetShortcutValidationError(_computer, false);
         if (increaseError is not null || decreaseError is not null)
         {
-            ShortcutStatus = increaseError ?? decreaseError!;
+            ShortcutStatus = ShortcutError = increaseError ?? decreaseError!;
             NotifyStatus();
             return;
         }
@@ -123,12 +143,13 @@ public class BrightnessAutomationController : IDisposable
                 _computer.BrightnessIncreaseModifiers ?? ModifierKeys.None, 1);
             RegisterHotkey(DecreaseHotkeyId, _computer.BrightnessDecreaseKey!.Value,
                 _computer.BrightnessDecreaseModifiers ?? ModifierKeys.None, -1);
+            ShortcutError = null;
             ShortcutStatus = "Brightness shortcuts are active for all connected DDC/CI monitors.";
         }
         catch (Exception exception)
         {
             RemoveHotkeys();
-            ShortcutStatus = "Brightness shortcut is unavailable or used by another app. Choose another combination.";
+            ShortcutStatus = ShortcutError = "Brightness shortcut is unavailable or used by another app. Choose another combination.";
             _logger.Warn(exception, "Failed to register brightness shortcuts.");
         }
         NotifyStatus();
@@ -160,7 +181,7 @@ public class BrightnessAutomationController : IDisposable
         return null;
     }
 
-    private void RegisterHotkey(string id, Key key, ModifierKeys modifiers, int direction)
+    protected virtual void RegisterHotkey(string id, Key key, ModifierKeys modifiers, int direction)
     {
         HotkeyManager.Current.AddOrReplace(id, new KeyGesture(key, modifiers), (_, args) =>
         {
@@ -170,7 +191,7 @@ public class BrightnessAutomationController : IDisposable
         });
     }
 
-    private void RemoveHotkeys()
+    protected virtual void RemoveHotkeys()
     {
         // Do not initialize the native hotkey window until the app has a dispatcher.
         if (System.Windows.Application.Current is null)
@@ -190,65 +211,138 @@ public class BrightnessAutomationController : IDisposable
     }
 
     /// <summary>Each display retains its relative brightness; a failed read is never guessed.</summary>
-    public void AdjustBrightness(int delta)
+    public void AdjustBrightness(int delta) => _ = AdjustBrightnessAsync(delta);
+
+    public Task AdjustBrightnessAsync(int delta)
     {
-        if (_computer is null)
-            return;
-        ApplyToDisplays(display =>
-        {
-            var brightness = _brightnessController.GetBrightness(display);
-            return brightness.HasValue ? Math.Clamp(brightness.Value + (long)delta, 0, 100) : (long?)null;
-        }, "Brightness shortcut");
+        if (!_dispatcher.CheckAccess())
+            return _dispatcher.InvokeAsync(() => AdjustBrightnessAsync(delta)).Task.Unwrap();
+        if (_computer is null || delta == 0)
+            return Task.CompletedTask;
+        return Enqueue(new AutomationRequest(delta, null, "Brightness shortcut"));
     }
 
-    private void ApplyToDisplays(Func<Display, long?> getBrightness, string source)
+    private Task Enqueue(AutomationRequest request)
     {
-        var successes = 0;
-        var failures = 0;
+        // Combine repeated steps in one direction while preserving reversal/clamping order.
+        if (request.Delta.HasValue && _pendingRequests.Last?.Value is { Delta: not null } last &&
+            Math.Sign(last.Delta.Value) == Math.Sign(request.Delta.Value))
+            _pendingRequests.Last.Value = last with { Delta = Math.Clamp(last.Delta.Value + request.Delta.Value, -100, 100) };
+        else
+        {
+            if (request.ScheduleSince.HasValue)
+            {
+                // A slow monitor should receive only the newest queued daily level.
+                for (var node = _pendingRequests.First; node != null;)
+                {
+                    var next = node.Next;
+                    if (node.Value.ScheduleSince.HasValue) _pendingRequests.Remove(node);
+                    node = next;
+                }
+            }
+            _pendingRequests.AddLast(request);
+        }
+        if (!_processingRequests)
+        {
+            _processingRequests = true;
+            _worker = _dispatcher.InvokeAsync(ProcessRequestsAsync).Task.Unwrap();
+        }
+        return _worker;
+    }
+
+    private async Task ProcessRequestsAsync()
+    {
         try
         {
-            foreach (var display in GetConnectedDisplays())
+            while (_pendingRequests.First is { } first)
             {
-                if (!_brightnessController.SupportsBrightness(display))
-                    continue;
-                var requested = getBrightness(display);
-                if (!requested.HasValue)
-                {
-                    failures++;
-                    continue;
-                }
-                var brightness = (int)Math.Clamp(requested.Value, 0, 100);
-                if (_brightnessController.SetBrightness(display, brightness))
-                {
-                    _persistence.Remember(display, brightness);
-                    successes++;
-                }
-                else
-                    failures++;
+                _pendingRequests.RemoveFirst();
+                var computer = _computer;
+                if (computer != null)
+                    await ApplyToDisplaysAsync(first.Value, computer, _operationVersion);
             }
-            Status = successes == 0 && failures == 0
-                ? $"{source}: no connected monitor supports DDC/CI brightness."
-                : $"{source}: applied to {successes} monitor(s)" +
-                  (failures > 0 ? $"; {failures} failed. Open Adjust brightness to retry." : ".");
+        }
+        finally { _processingRequests = false; }
+    }
+
+    private async Task ApplyToDisplaysAsync(AutomationRequest request, Computer computer, int version)
+    {
+        try
+        {
+            var result = await Task.Run(() =>
+            {
+                var applied = new List<(Display Display, int Brightness)>();
+                var failures = 0;
+                var deferred = false;
+                foreach (var display in GetConnectedDisplays())
+                {
+                    if (version != Volatile.Read(ref _operationVersion)) break;
+                    if (_brightnessController.IsDisplaySleeping) { deferred = true; break; }
+                    if (!_brightnessController.SupportsBrightness(display)) continue;
+                    var current = request.Delta.HasValue ? _brightnessController.GetBrightness(display) : request.Brightness;
+                    if (!current.HasValue) { failures++; continue; }
+                    var brightness = (int)Math.Clamp(current.Value + (request.Delta ?? 0), 0, 100);
+                    if (version != Volatile.Read(ref _operationVersion)) break;
+                    if (_brightnessController.IsDisplaySleeping) { deferred = true; break; }
+                    if (_brightnessController.SetBrightness(display, brightness)) applied.Add((display, brightness));
+                    else if (_brightnessController.IsDisplaySleeping) { deferred = true; break; }
+                    else failures++;
+                }
+                return (Applied: applied, Failures: failures, Deferred: deferred);
+            });
+            if (version != _operationVersion || !ReferenceEquals(computer, _computer)) return;
+            // Continuations run on the dispatcher; only the UI thread updates the live settings model.
+            foreach (var applied in result.Applied)
+            {
+                var latest = _brightnessController.GetLastKnownBrightness(applied.Display);
+                if (!latest.HasValue || latest.Value == applied.Brightness)
+                    _persistence.Remember(applied.Display, applied.Brightness);
+            }
+            if (result.Deferred && request.ScheduleSince.HasValue)
+            {
+                if (request.ScheduleSince.Value < _lastScheduleCheck) _lastScheduleCheck = request.ScheduleSince.Value;
+                if (!_brightnessController.IsDisplaySleeping) CheckSchedules(LocalNow);
+                return;
+            }
+            Status = result.Applied.Count == 0 && result.Failures == 0
+                ? $"{request.Source}: no connected monitor supports DDC/CI brightness."
+                : $"{request.Source}: applied to {result.Applied.Count} monitor(s)" +
+                  (result.Failures > 0 ? $"; {result.Failures} failed. Open Adjust brightness to retry." : ".");
         }
         catch (Exception exception)
         {
-            Status = $"{source} failed. Reconnect the monitor and retry in Adjust brightness.";
+            if (version == _operationVersion && ReferenceEquals(computer, _computer))
+                Status = $"{request.Source} failed. Reconnect the monitor and retry in Adjust brightness.";
             _logger.Warn(exception, "Brightness automation failed.");
         }
         NotifyStatus();
     }
 
-    private void OnTimerTick(object? sender, EventArgs args)
+    private void OnDisplayPowerChanged(bool awake)
     {
-        var now = DateTime.Now;
+        if (!awake || !_started || _dispatcher.HasShutdownStarted) return;
+        _dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_started) CheckSchedules(LocalNow);
+        }));
+    }
+
+    private void OnTimerTick(object? sender, EventArgs args) => CheckSchedules(LocalNow);
+
+    private void CheckSchedules(DateTime now)
+    {
+        if (_computer?.IsBrightnessScheduleEnabled != true)
+        {
+            _lastScheduleCheck = now;
+            return;
+        }
+        // Keep the interval open while displays sleep, then apply its latest due entry on wake.
+        if (_brightnessController.IsDisplaySleeping) return;
         var previous = _lastScheduleCheck;
         _lastScheduleCheck = now;
-        if (_computer?.IsBrightnessScheduleEnabled != true)
-            return;
         var schedule = FindLatestDueSchedule(_computer.BrightnessSchedules, previous, now);
         if (schedule is not null)
-            ApplyToDisplays(_ => schedule.Brightness, $"Daily schedule at {schedule.Time}");
+            _ = Enqueue(new AutomationRequest(null, schedule.Brightness, $"Daily schedule at {schedule.Time}", previous));
     }
 
     private void UpdateScheduleStatus()

@@ -132,6 +132,7 @@ public class SettingsViewModel : Screen
     public string DecreaseShortcutText => _recordingIncrease == false ? "Press keys (Esc cancels)" :
         ProfileSettingViewModel.FormatHotkey(_brightnessDraft.BrightnessDecreaseModifiers, _brightnessDraft.BrightnessDecreaseKey);
     public string ShortcutStatus => _automation?.ShortcutStatus ?? "Brightness shortcuts are off.";
+    public bool HasShortcutError => _automation?.ShortcutError != null;
     public string AutomationStatus => _automation?.Status ?? "Brightness automation is off.";
     public string SettingsStatus
     {
@@ -280,6 +281,7 @@ public class SettingsViewModel : Screen
     private void OnAutomationStatusChanged()
     {
         NotifyOfPropertyChange(nameof(ShortcutStatus));
+        NotifyOfPropertyChange(nameof(HasShortcutError));
         NotifyOfPropertyChange(nameof(AutomationStatus));
     }
 

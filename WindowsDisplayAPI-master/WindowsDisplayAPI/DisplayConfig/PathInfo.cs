@@ -573,7 +573,7 @@ namespace WindowsDisplayAPI.DisplayConfig
                 info.Id == mode.Id
             );
 
-            if (existingMode > 0)
+            if (existingMode >= 0)
             {
                 if (modes[existingMode] == mode)
                 {
