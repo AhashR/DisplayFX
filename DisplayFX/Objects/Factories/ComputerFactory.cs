@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FluentResults;
 using NLog;
 using DisplayFX.Global.Controllers;
@@ -67,8 +68,15 @@ public class ComputerFactory
                     if (string.IsNullOrWhiteSpace(name))
                         name = screen.ScreenName;
 
-                    computer.Monitors.Add(_monitorFactory.CreateDefault(
-                        display.DevicePath, name, setting.Resolution, setting.Frequency));
+                    var monitor = _monitorFactory.CreateDefault(display.DevicePath, name, setting.Resolution, setting.Frequency);
+                    try
+                    {
+                        using var pnp = display.OpenDevicePnPKey();
+                        using var parameters = pnp?.OpenSubKey("Device Parameters");
+                        monitor.HardwareIdentity = MonitorIdentityController.FromEdid(parameters?.GetValue("EDID") as byte[]);
+                    }
+                    catch (Exception exception) { _logger.Debug(exception, "Monitor serial information is unavailable."); }
+                    computer.Monitors.Add(monitor);
                 }
                 catch (Exception e)
                 {
@@ -102,6 +110,19 @@ public class ComputerFactory
             if (knownPaths.TryGetValue(monitor.DisplayDevicePath, out var existing))
             {
                 changed |= existing.RefreshMetadata(monitor);
+                continue;
+            }
+
+            var candidates = saved.Monitors.Where(savedMonitor => !string.IsNullOrWhiteSpace(monitor.HardwareIdentity) &&
+                string.Equals(savedMonitor.HardwareIdentity, monitor.HardwareIdentity, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (candidates.Count == 1 && detected.Monitors.Count(candidate => string.Equals(candidate.HardwareIdentity, monitor.HardwareIdentity, StringComparison.OrdinalIgnoreCase)) == 1 &&
+                !detected.Monitors.Any(candidate => string.Equals(candidate.DisplayDevicePath, candidates[0].DisplayDevicePath, StringComparison.OrdinalIgnoreCase)))
+            {
+                existing = candidates[0];
+                existing.DisplayDevicePath = monitor.DisplayDevicePath;
+                existing.RefreshMetadata(monitor);
+                knownPaths[monitor.DisplayDevicePath] = existing;
+                changed = true;
                 continue;
             }
 

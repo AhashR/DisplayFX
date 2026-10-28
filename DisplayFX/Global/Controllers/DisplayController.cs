@@ -17,16 +17,23 @@ public class DisplayController
         _windowManager = windowManager;
     }
 
-    public bool UpdateColorSettings(Display display, ProfileSetting profileSetting,
+    public string? LastError { get; private set; }
+
+    public virtual bool UpdateColorSettings(Display display, ProfileSetting profileSetting,
         NvAPIWrapper.Display.Display? nvidiaMonitor)
     {
         try
         {
+            LastError = null;
             var ramp = new DisplayGammaRamp(profileSetting.Brightness, profileSetting.Contrast, profileSetting.Gamma);
             // Capture the current values before a combined update so a GPU failure
             // does not leave the gamma preview applied while activation reports failure.
             var previousRamp = nvidiaMonitor != null ? display.GammaRamp : null;
+            if (nvidiaMonitor != null && previousRamp == null)
+                throw new InvalidOperationException("The previous color settings could not be read. No color changes were applied.");
             var previousVibrance = nvidiaMonitor?.DigitalVibranceControl.NormalizedLevel;
+            _logger.Info("Applying GPU color settings for {0}: brightness={1}, contrast={2}, gamma={3}, vibrance={4}. No physical brightness commands.",
+                display.DevicePath, profileSetting.Brightness, profileSetting.Contrast, profileSetting.Gamma, profileSetting.DigitalVibrance);
             ApplyWithRollback(
                 () => display.GammaRamp = ramp,
                 nvidiaMonitor == null ? null : () =>
@@ -43,7 +50,7 @@ public class DisplayController
             _logger.Error(message);
             _logger.Error(e);
 
-            _windowManager.ShowMessageBox(message);
+            LastError = message + " " + e.Message;
             return false;
         }
     }

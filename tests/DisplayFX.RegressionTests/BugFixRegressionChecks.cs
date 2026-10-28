@@ -141,7 +141,7 @@ internal static class BugFixRegressionChecks
         hardware.Levels["first"] = 40;
         hardware.Levels["second"] = 40;
 
-        using (var flyout = new BrightnessFlyoutViewModel(hardware, cache, persistence))
+        using (var flyout = new BrightnessFlyoutViewModel(hardware, cache, persistence, deferInitialization: false))
         {
             var removed = flyout.Monitors[1];
             removed.Brightness = 77;

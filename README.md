@@ -6,14 +6,16 @@ DisplayFX manages per-monitor color profiles and physical backlight brightness o
 
 ## Using the app
 
-- Select a monitor tab, then a profile. Create up to five profiles per monitor with **+**. Right-click a profile to duplicate, rename, export or remove it.
+- Select a monitor tab, then a profile. Create up to five profiles per monitor with **+** or import a profile's colors with the import icon. Imported colors receive a unique name without reserving shortcuts or application links. Right-click a profile to duplicate, rename, export or remove it.
 - Adjust brightness, contrast, vibrance and gamma. The **play** icon applies a profile or previews edits, **undo** reverts edits, and **save** stores the draft. Profile shortcuts and executable links are optional; all edits remain isolated until saved. Use **Link application** to choose an executable. Its profile applies while that app is in the foreground, then the previously active profile returns when you leave it.
+- Color brightness adjusts the GPU gamma ramp. Profiles never send physical brightness commands. Profile application runs in the background; failed automatic updates show nonmodal feedback and retry after 30 seconds. A display-mode change or reconnect invalidates the previous application and reapplies the intended colors.
 - The toolbar provides **identify displays**, **refresh** and **settings**. Hover an icon for its label. Settings contains complete backup and restore. Restore merges profiles while retaining existing monitor identity, labels and remembered brightness; imports exceeding five profiles fail without changing settings.
-- Right-click a monitor tab to rename it. Disconnected displays retain profiles, and drafts survive reconnection during the same session.
+- Right-click a monitor tab to rename it. Disconnected displays retain profiles, and drafts survive reconnection during the same session. When a valid, unique EDID serial is available, profiles also follow the same panel across changed ports/docks. Ambiguous identities are never guessed.
 - Left-click the tray icon for brightness sliders. The **link** icon links their levels, **open app** opens the main DisplayFX screen, **power** turns displays off, and **gear** opens settings. Normal rows show only the monitor name, percentage and slider; errors appear as a small warning with details in its tooltip.
 - Brightness writes run outside the UI thread and coalesce rapid input to the latest requested value. Requests to one monitor are serialized and use its working API and cached range. Transient failed writes get one automatic retry. Closing the popup flushes pending input, and only successful writes are remembered. A sleeping or temporarily unreadable monitor keeps its last known level. Controls reconnect automatically after wake; a completely unknown level displays a dash instead of an invented 50%.
-- The main app and Settings use the standard Windows title bar: drag the title bar to move either window. Settings has a compact layout and no scrolling. Large daily-time lists use small pages. Optionally enable brightness shortcuts, set their step, and add daily `HH:mm` times and brightness levels. Save these controls with the save icon inside that section. Startup and tray preferences save immediately. Default shortcuts are Ctrl+Alt+Page Up / Page Down with a 10% step; shortcuts and schedules are off initially. After sleep, only the latest due scheduled level applies.
-- Shortcut conflicts appear beside the controls. Shortcuts are temporarily released while recording. Individual profile import is removed. Old executable links remain readable; transient app-switch state restores the manual profile on startup.
+- The main app and Settings use the standard Windows title bar: drag the title bar to move either window. Settings scrolls when the work area is small; daily-time lists use small pages without losing invalid draft input. Optionally enable brightness shortcuts, set their step, and add daily `HH:mm` times and brightness levels. Save these controls with the save icon inside that section. Startup and tray preferences save immediately. Default shortcuts are Ctrl+Alt+Page Up / Page Down with a 10% step; shortcuts and schedules are off initially. After sleep, only the latest due scheduled level applies. Failed/missing outputs get bounded retries, which do not override newer explicit brightness changes.
+- Shortcut and application-link conflicts appear beside the controls. Shortcuts are temporarily released while recording. Old executable links remain readable; transient app-switch state restores the manual profile on startup. Settings restore warns before discarding unsaved profile drafts and reconciles the resulting active colors.
+- Settings provides **Open diagnostic logs** for bounded rotating files in `%LOCALAPPDATA%\DisplayFX\Logs`. Opt-in **Color change diagnostics** observes physical brightness before and after color application, including delayed changes, without sending corrections. Use this to investigate monitor dynamic contrast/HDR, driver resets, or competing brightness tools. Independent brightness is disabled for ambiguous cloned physical outputs.
 
 ## Requirements
 
@@ -55,6 +57,8 @@ dotnet run --project DisplayFX\DisplayFX.csproj -c Release --no-build
 ```
 
 Before releasing, verify physical DDC/CI commands, GPU color updates, global shortcuts, screen overlays and docking/undocking on supported hardware.
+
+Windows CI runs the regression suite on pushes and pull requests. A main-branch version change triggers the release workflow, which tests, builds the installer with a signature-verified compiler, verifies uploaded checksums, and publishes the release. Published versions are never overwritten. See [the 2.1.2 review resolution](docs/audit-resolution-2.1.2.md).
 
 ## Build the installer
 

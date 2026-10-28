@@ -28,7 +28,8 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
     public BrightnessFlyoutViewModel(
         MonitorBrightnessController brightnessController,
         DisplayCache displayCache,
-        BrightnessPersistenceController brightnessPersistenceController, MonitorTopologyController? topology = null)
+        BrightnessPersistenceController brightnessPersistenceController, MonitorTopologyController? topology = null,
+        bool deferInitialization = true)
     {
         _brightnessController = brightnessController;
         _persistence = brightnessPersistenceController;
@@ -38,7 +39,7 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
 
         // Re-enumerate when opening the flyout so disconnected monitors disappear
         // and newly connected monitors have usable controls without restarting.
-        var displays = GetConnectedDisplays();
+        var displays = deferInitialization ? Array.Empty<Display>() : GetConnectedDisplays();
 
         Monitors = new ObservableCollection<BrightnessMonitorViewModel>(
             displays
@@ -47,10 +48,13 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
                     brightnessController,
                     OnMonitorBrightnessChanged,
                     brightnessPersistenceController.Remember,
-                    brightnessPersistenceController.GetMonitorName(display), brightnessPersistenceController.GetRememberedBrightness(display))));
+                    brightnessPersistenceController.GetMonitorName(display), brightnessPersistenceController.GetRememberedBrightness(display), deferInitialization)));
         if (_topology != null) _topology.TopologyChanged += OnTopologyChanged;
         brightnessController.DisplayPowerChanged += OnDisplayPowerChanged;
+        if (deferInitialization) Initialization = RefreshDisplaysAsync();
     }
+
+    public Task Initialization { get; } = Task.CompletedTask;
 
     public ObservableCollection<BrightnessMonitorViewModel> Monitors { get; }
 
@@ -113,7 +117,11 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
         SettingsRequested?.Invoke();
     }
 
-    public Task FlushPendingBrightnessAsync() => Task.WhenAll(Monitors.Select(monitor => monitor.FlushPendingBrightnessAsync()));
+    public async Task FlushPendingBrightnessAsync()
+    {
+        await Initialization;
+        await Task.WhenAll(Monitors.Select(monitor => monitor.FlushPendingBrightnessAsync()));
+    }
 
     public void Dispose()
     {
@@ -142,7 +150,8 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
         try
         {
             // Enumerating after wake replaces stale logical monitor objects as well as their DDC ranges.
-            var displays = GetConnectedDisplays();
+            var displays = await Task.Run(GetConnectedDisplays);
+            if (_disposed) return;
             _brightnessController.InvalidateTransports();
             foreach (var monitor in Monitors.ToList())
             {
@@ -159,7 +168,7 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
             {
                 if (_disposed) return;
                 Monitors.Add(new BrightnessMonitorViewModel(display, _brightnessController, OnMonitorBrightnessChanged,
-                    _persistence.Remember, _persistence.GetMonitorName(display), _persistence.GetRememberedBrightness(display)));
+                    _persistence.Remember, _persistence.GetMonitorName(display), _persistence.GetRememberedBrightness(display), true));
             }
         }
         catch (Exception) { LinkStatus = "Display controls reconnect automatically after wake."; }

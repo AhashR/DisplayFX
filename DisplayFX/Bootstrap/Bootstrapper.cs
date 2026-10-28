@@ -64,6 +64,7 @@ public class Bootstrapper : BootstrapperBase
 
     public Bootstrapper()
     {
+        LoggingController.Configure();
         try
         {
             SetCurrentProcessExplicitAppUserModelID("DisplayFX.App");
@@ -93,6 +94,7 @@ public class Bootstrapper : BootstrapperBase
         services.AddSingleton<MonitorTopologyController>();
         services.AddSingleton<MonitorIdentificationService>();
         services.AddSingleton<DisplayController>();
+        services.AddSingleton<ColorUpdateDiagnostics>();
         services.AddSingleton<DataController>();
 
         services.AddTransient<ProfileFactory>();
@@ -158,14 +160,7 @@ public class Bootstrapper : BootstrapperBase
 
     public static void TrimMemory()
     {
-        try
-        {
-            GC.Collect(2, GCCollectionMode.Forced, true, true);
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, (IntPtr)(-1), (IntPtr)(-1));
-        }
-        catch { }
+        // Retained for compatibility with view lifecycle code. Normal GC owns memory policy.
     }
 
     private static System.Threading.Mutex? _singleInstanceMutex;

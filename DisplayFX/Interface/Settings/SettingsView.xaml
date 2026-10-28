@@ -11,7 +11,8 @@
    <Setter Property="BorderBrush" Value="{DynamicResource BorderColorBrush}"/><Setter Property="Padding" Value="8,5"/>
   </Style>
  </Window.Resources>
- <Grid Margin="16" Background="{DynamicResource WindowBackgroundBrush}">
+ <ScrollViewer MaxHeight="520" Padding="16" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+ <Grid Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}" MinWidth="620" Background="{DynamicResource WindowBackgroundBrush}">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
   <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="12" Padding="16" VerticalAlignment="Top">
@@ -22,6 +23,8 @@
     <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsMinimizeToTray}" Content="Close to tray" Margin="0,0,0,16" ToolTip="The close button keeps DisplayFX running in the tray"/>
     <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsApplySettingsOnStart}" Content="Restore colour profiles" Margin="0,0,0,16" ToolTip="Apply the active saved profile on launch"/>
     <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsRememberBrightnessOnStart}" Content="Restore brightness" ToolTip="Restore the last successful brightness on launch"/>
+    <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsColorDiagnosticsEnabled}" Content="Color change diagnostics" Margin="0,16,0,0" ToolTip="Read brightness around color changes to investigate unexpected monitor behavior. No brightness corrections are sent."/>
+    <Button Name="OpenLogs" Content="Open diagnostic logs" Style="{DynamicResource DarkThemeButtonStyle}" Margin="0,12,0,0"/>
     <Border Height="1" Background="{DynamicResource BorderColorBrush}" Margin="0,20"/>
     <TextBlock Text="Settings backup" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,10"/>
     <Grid>
@@ -57,8 +60,8 @@
     </Grid>
     <ItemsControl ItemsSource="{Binding VisibleSchedules}"><ItemsControl.ItemTemplate><DataTemplate>
      <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition Width="36"/></Grid.ColumnDefinitions>
-      <TextBox Text="{Binding Time, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,0" ToolTip="24-hour time (HH:mm)" AutomationProperties.Name="Daily time"/>
-      <TextBox Grid.Column="1" Text="{Binding Brightness, UpdateSourceTrigger=LostFocus}" Margin="0,0,8,0" ToolTip="Brightness from 0 to 100" AutomationProperties.Name="Scheduled brightness percent"/>
+      <TextBox Text="{Binding Time, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" ToolTip="24-hour time (HH:mm)" AutomationProperties.Name="Daily time"/>
+      <TextBox Grid.Column="1" Text="{Binding BrightnessInput, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" ToolTip="Brightness from 0 to 100" AutomationProperties.Name="Scheduled brightness percent"/>
       <Button Grid.Column="2" Content="&#xE74D;" Click="RemoveSchedule_Click" Style="{DynamicResource IconButtonStyle}" ToolTip="Remove time" AutomationProperties.Name="Remove scheduled time"/>
      </Grid>
     </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
@@ -81,4 +84,5 @@
    <Button Grid.Column="1" Name="Done" Content="&#xE73E;" Style="{DynamicResource IconButtonStyle}" ToolTip="Done" AutomationProperties.Name="Done"/>
   </Grid>
  </Grid>
+ </ScrollViewer>
 </Window>

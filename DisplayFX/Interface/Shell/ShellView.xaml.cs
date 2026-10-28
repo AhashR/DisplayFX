@@ -272,6 +272,7 @@ public partial class ShellView
 
     private async void ShowBrightnessFlyout()
     {
+        var anchor = System.Windows.Forms.Cursor.Position;
         await Task.WhenAll(_brightnessWindows.Where(window => !window.IsVisible).Select(window => window.CloseCompletion));
         if (_isExiting) return;
         // Reuse the window if it is already on screen instead of stacking a
@@ -310,7 +311,7 @@ public partial class ShellView
                 await shellViewModel.OpenSettings();
         };
 
-        var flyout = new BrightnessFlyoutView { DataContext = viewModel };
+        var flyout = new BrightnessFlyoutView { DataContext = viewModel, AnchorPoint = anchor };
         _brightnessWindows.Add(flyout);
         flyout.Closed += (_, _) =>
         {

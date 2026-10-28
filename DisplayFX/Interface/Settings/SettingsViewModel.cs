@@ -54,6 +54,23 @@ public class SettingsViewModel : Screen
         }
     }
 
+    public bool IsColorDiagnosticsEnabled
+    {
+        get => _computer.IsColorDiagnosticsEnabled;
+        set => SaveOption(() => _computer.IsColorDiagnosticsEnabled, option => _computer.IsColorDiagnosticsEnabled = option,
+            value, nameof(IsColorDiagnosticsEnabled));
+    }
+
+    public void OpenLogs()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(LoggingController.LogDirectory);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(LoggingController.LogDirectory) { UseShellExecute = true });
+        }
+        catch (Exception exception) { SettingsStatus = "Could not open logs. " + exception.Message; }
+    }
+
     public bool IsStartMinimized
     {
         get => _computer.IsStartMinimized;

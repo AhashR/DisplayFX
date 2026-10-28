@@ -26,6 +26,8 @@ public class MonitorBrightnessController
     private readonly ILogger _logger;
     private readonly ConcurrentDictionary<string, BrightnessStatus> _statuses = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _lastKnown = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, long> _versions = new(StringComparer.OrdinalIgnoreCase);
+    public long GetVersion(Display display) => _versions.TryGetValue(display.DevicePath, out var version) ? version : 0;
     private volatile bool _displaysAsleep;
     public bool IsDisplaySleeping => _displaysAsleep;
     public event Action<bool>? DisplayPowerChanged;
@@ -66,7 +68,12 @@ public class MonitorBrightnessController
     protected void RecordStatus(Display display, BrightnessStatus status)
     {
         _statuses[display.DevicePath] = status;
-        if (!status.IsError && status.Brightness.HasValue) _lastKnown[display.DevicePath] = status.Brightness.Value;
+        if (!status.IsError && status.Brightness.HasValue)
+        {
+            if (!_lastKnown.TryGetValue(display.DevicePath, out var previous) || previous != status.Brightness.Value)
+                _versions.AddOrUpdate(display.DevicePath, 1, (_, version) => version + 1);
+            _lastKnown[display.DevicePath] = status.Brightness.Value;
+        }
         // UI feedback must never turn a successful hardware operation into a failure.
         if (StatusChanged == null) return;
         foreach (Action<Display, BrightnessStatus> subscriber in StatusChanged.GetInvocationList())
@@ -81,6 +88,25 @@ public class MonitorBrightnessController
         _logger = logger;
     }
 
+    /// <summary>Relative changes share the same monitor lock as absolute slider writes.</summary>
+    public virtual int? AdjustBrightness(Display display, long delta)
+    {
+        var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());
+        lock (channel)
+        {
+            if (IsDisplaySleeping || GetBrightness(display) is not int current) return null;
+            var target = (int)Math.Clamp(current + delta, 0L, 100L);
+            return SetBrightness(display, target) ? target : null;
+        }
+    }
+
+    public virtual bool SetBrightnessIfCurrent(Display display, int brightness, long expectedVersion)
+    {
+        var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());
+        lock (channel)
+            return !IsDisplaySleeping && GetVersion(display) == expectedVersion && SetBrightness(display, brightness);
+    }
+
     /// <summary>
     ///     Reads the current backlight brightness (0-100) of the given display,
     ///     normalized against the monitor's reported VCP maximum. Returns null
@@ -92,6 +118,7 @@ public class MonitorBrightnessController
         var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());
         lock (channel)
         {
+            if (IsDisplaySleeping) return null;
             RefreshChannel(channel);
             var brightness = TryGetBrightness(display, channel);
             if (!brightness.HasValue) channel.Invalidated = true;
@@ -119,8 +146,10 @@ public class MonitorBrightnessController
 
             try
             {
+                if (!HasUnambiguousTarget(display, physicalMonitors)) return null;
                 foreach (var physicalMonitor in physicalMonitors)
                 {
+                    if (IsDisplaySleeping) return null;
                     if (ReadBrightness(physicalMonitor.Handle, channel, out var value))
                         return value;
                 }
@@ -148,7 +177,7 @@ public class MonitorBrightnessController
     {
         if (display is null || IsDisplaySleeping) return false;
         var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());
-        lock (channel) return channel.HighLevel.HasValue || TrySupportsBrightness(display);
+        lock (channel) return !IsDisplaySleeping && (!channel.Invalidated && channel.HighLevel.HasValue || TrySupportsBrightness(display));
     }
 
     private bool TrySupportsBrightness(Display display)
@@ -168,6 +197,7 @@ public class MonitorBrightnessController
 
             try
             {
+                if (!HasUnambiguousTarget(display, physicalMonitors)) return false;
                 var hasUnknownCapabilities = false;
                 foreach (var physicalMonitor in physicalMonitors)
                 {
@@ -210,8 +240,10 @@ public class MonitorBrightnessController
         var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());
         lock (channel)
         {
+            if (IsDisplaySleeping) return false;
             RefreshChannel(channel);
             var applied = TrySetBrightness(display, brightness, channel);
+            if (applied) _versions.AddOrUpdate(display.DevicePath, 1, (_, version) => version + 1);
             if (!applied) channel.Invalidated = true;
             RecordStatus(display, new BrightnessStatus(applied ? "" :
                 "Brightness change failed. Check the monitor connection and DDC/CI setting.", !applied,
@@ -246,21 +278,25 @@ public class MonitorBrightnessController
 
             try
             {
+                if (!HasUnambiguousTarget(display, physicalMonitors)) return false;
                 var targetBrightness = Math.Clamp(brightness, 0, 100);
 
                 foreach (var physicalMonitor in physicalMonitors)
                 {
+                    if (IsDisplaySleeping) return false;
                     // Use the same API and range that worked for reading this monitor.
                     // Re-query only on first contact or when the preferred write fails.
                     if (!channel.HighLevel.HasValue) ReadBrightness(physicalMonitor.Handle, channel, out _);
                     var highLevel = channel.HighLevel ?? true;
                     var value = ScaleBrightness(targetBrightness, channel.Minimum, channel.Maximum);
+                    if (IsDisplaySleeping) return false;
                     if (WriteBrightness(physicalMonitor.Handle, highLevel, value)) return true;
 
                     var fallback = new Channel();
                     // A few monitors accept writes through an API that cannot read their level.
                     // If that read is unavailable, its default 0–100 range is still worth trying.
                     ReadBrightness(physicalMonitor.Handle, fallback, out _, !highLevel);
+                    if (IsDisplaySleeping) return false;
                     if (WriteBrightness(physicalMonitor.Handle, !highLevel,
                             ScaleBrightness(targetBrightness, fallback.Minimum, fallback.Maximum)))
                     {
@@ -339,12 +375,19 @@ public class MonitorBrightnessController
             var read = highLevel ? ReadHighLevel(handle, out min, out current, out max) : ReadVcp(handle, out current, out max);
             if (!read) continue;
             channel.HighLevel = highLevel;
-            channel.Minimum = min;
-            channel.Maximum = max == 0 ? 100 : max;
+            channel.Minimum = max <= min ? 0 : min;
+            channel.Maximum = max <= min ? 100 : max;
             brightness = highLevel ? NormalizeBrightness(min, current, max) : NormalizeBrightness(current, max);
             return true;
         }
         brightness = 0;
+        return false;
+    }
+
+    protected virtual bool HasUnambiguousTarget(Display display, PhysicalMonitor[] monitors)
+    {
+        if (monitors.Length == 1) return true;
+        _logger.Warn("Independent brightness is disabled for ambiguous physical outputs: {0} ({1} targets).", display.DevicePath, monitors.Length);
         return false;
     }
 

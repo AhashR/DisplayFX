@@ -14,7 +14,8 @@ public class Monitor
         Frequency = frequency;
     }
 
-    public string DisplayDevicePath { get; }
+    public string DisplayDevicePath { get; internal set; }
+    public string? HardwareIdentity { get; set; }
     public string Name { get; private set; }
     public string? CustomName { get; set; }
     [JsonIgnore]
@@ -30,6 +31,11 @@ public class Monitor
         Name = detected.Name;
         Resolution = detected.Resolution;
         Frequency = detected.Frequency;
+        if (!string.IsNullOrWhiteSpace(detected.HardwareIdentity))
+        {
+            changed |= HardwareIdentity != detected.HardwareIdentity;
+            HardwareIdentity = detected.HardwareIdentity;
+        }
         return changed;
     }
 }

@@ -8,10 +8,23 @@ namespace DisplayFX.Objects.Entities;
 public class BrightnessSchedule
 {
     public string Time { get; set; } = "20:00";
-    public int Brightness { get; set; } = 40;
+    private int _brightness = 40;
+    private string? _brightnessInput;
+    public int Brightness { get => _brightness; set { _brightness = value; _brightnessInput = null; } }
+    [JsonIgnore]
+    public string BrightnessInput
+    {
+        get => _brightnessInput ?? Brightness.ToString(CultureInfo.InvariantCulture);
+        set
+        {
+            _brightnessInput = value;
+            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var level)) _brightness = level;
+        }
+    }
 
     [JsonIgnore]
-    public bool IsValid => TryGetTime(out _) && Brightness is >= 0 and <= 100;
+    public bool IsValid => TryGetTime(out _) && Brightness is >= 0 and <= 100 &&
+        (_brightnessInput == null || int.TryParse(_brightnessInput, NumberStyles.Integer, CultureInfo.InvariantCulture, out _));
 
     public bool TryGetTime(out TimeSpan time) => TimeSpan.TryParseExact(Time,
         @"hh\:mm", CultureInfo.InvariantCulture, out time) && time >= TimeSpan.Zero && time < TimeSpan.FromDays(1);

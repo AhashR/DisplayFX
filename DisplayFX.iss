@@ -2,7 +2,7 @@
 ; Created for DisplayFX Windows Installer
 
 #define MyAppName "DisplayFX"
-#define MyAppVersion "2.1.1"
+#define MyAppVersion "2.1.2"
 #define MyAppPublisher "AhashR"
 #define MyAppURL "https://github.com/AhashR/DisplayFX"
 #define MyAppExeName "DisplayFX.exe"
@@ -49,6 +49,9 @@ Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Excludes: "\Data\*,*.pdb"; Flag
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\Resources\desktop.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "DisplayFX"; Flags: dontcreatekey uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

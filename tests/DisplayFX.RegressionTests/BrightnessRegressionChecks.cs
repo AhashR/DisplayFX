@@ -17,6 +17,7 @@ internal static class BrightnessRegressionChecks
         _checkCount = 0;
         CheckBrightnessRanges();
         CheckNativeTransportSelection();
+
         var destroyParameter = typeof(MonitorBrightnessController)
             .GetMethod("DestroyPhysicalMonitors", BindingFlags.Static | BindingFlags.NonPublic)!
             .GetParameters()[1];
@@ -67,6 +68,7 @@ internal static class BrightnessRegressionChecks
             var computer = new Computer();
             var monitor = new DisplayFX.Objects.Entities.Monitor("display-test", "Regression display",
                 new System.Drawing.Size(1920, 1080), 60) { LastBrightness = 42 };
+            monitor.Profiles.Add(new Profile(monitor, "Default", new(.5, .5, 1, .5), true, true));
             computer.Monitors.Add(monitor);
             persistence.Attach(computer);
             var display = new FakeDisplay("DISPLAY-TEST");

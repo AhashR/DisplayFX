@@ -4,9 +4,9 @@
  <UserControl.Resources><BooleanToVisibilityConverter x:Key="BoolVisibility"/></UserControl.Resources>
  <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="12" Padding="20">
   <StackPanel><Grid Margin="0,0,0,16">
-        <TextBlock Text="Brightness" FontSize="13" Foreground="{DynamicResource TextMutedBrush}"/>
+        <TextBlock Text="Color brightness" FontSize="13" Foreground="{DynamicResource TextMutedBrush}" ToolTip="Adjusts the GPU color curve. Physical backlight brightness is controlled separately from the tray."/>
         <TextBlock Text="{Binding Brightness, StringFormat=p0}" FontSize="13" HorizontalAlignment="Right"/>
-        <Slider Margin="0,24,0,0" Style="{DynamicResource BrightnessSliderStyle}" Value="{Binding Brightness}" Minimum="0" Maximum="1" SmallChange="0.01" LargeChange="0.05" AutomationProperties.Name="Brightness"/>
+        <Slider Margin="0,24,0,0" Style="{DynamicResource BrightnessSliderStyle}" Value="{Binding Brightness}" Minimum="0" Maximum="1" SmallChange="0.01" LargeChange="0.05" AutomationProperties.Name="Color brightness"/>
     </Grid><Grid Margin="0,0,0,16">
         <TextBlock Text="Contrast" FontSize="13" Foreground="{DynamicResource TextMutedBrush}"/>
         <TextBlock Text="{Binding Contrast, StringFormat=p0}" FontSize="13" HorizontalAlignment="Right"/>

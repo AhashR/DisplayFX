@@ -101,6 +101,8 @@ public class BrightnessPersistenceController
     {
         if (_computer is null)
             return;
+        if (_monitorBrightnessController.GetLastKnownBrightness(display) is int latest && latest != brightness)
+            return; // A delayed UI completion must not replace a newer accepted value.
 
         var monitor = _computer.Monitors.FirstOrDefault(candidate =>
             string.Equals(candidate.DisplayDevicePath, display.DevicePath,

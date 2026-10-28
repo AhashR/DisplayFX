@@ -77,6 +77,28 @@ public static class ProfileTransferController
         WriteExport(path, SettingsFormat, JObject.FromObject(computer, JsonSerializer.Create(SerializerSettings)));
     }
 
+    public static Profile ReadProfile(string path, Monitor target)
+    {
+        var payload = ReadExport(path, ProfileFormat);
+        ValidateProfilePayload(payload);
+        var profile = payload.ToObject<Profile>(JsonSerializer.Create(SerializerSettings))
+            ?? throw new InvalidDataException("The file contains no profile.");
+        ValidateProfile(profile);
+        // Import color settings only; importing a trigger must never steal an existing shortcut/application.
+        return CloneProfile(profile, target, GetUniqueName(target, profile.Name));
+    }
+
+    public static void ValidateStoredComputer(Computer computer) => ValidateComputer(computer, false);
+
+    public static string? GetExecutableConflict(Profile profile)
+    {
+        if (string.IsNullOrWhiteSpace(profile.LinkedExecutablePath)) return null;
+        return profile.Monitor.Profiles.Any(other => !ReferenceEquals(other, profile) &&
+            (ProcessController.MatchesExecutable(other.LinkedExecutablePath, profile.LinkedExecutablePath) ||
+             ProcessController.MatchesExecutable(profile.LinkedExecutablePath, other.LinkedExecutablePath)))
+            ? "This application is already linked to another profile on this monitor. Unlink it there first." : null;
+    }
+
     public static Computer ReadSettings(string path)
     {
         var payload = ReadExport(path, SettingsFormat);
@@ -225,7 +247,7 @@ public static class ProfileTransferController
             throw new InvalidDataException($"The {setting} setting must be between {minimum} and {maximum}.");
     }
 
-    private static void ValidateComputer(Computer? computer)
+    private static void ValidateComputer(Computer? computer, bool validateTriggers = true)
     {
         if (computer?.Monitors == null || computer.Monitors.Count > 64)
             throw new InvalidDataException("The file contains an invalid monitor list.");
@@ -240,10 +262,14 @@ public static class ProfileTransferController
                 throw new InvalidDataException("The file contains an invalid monitor, duplicate monitor, or brightness setting.");
             if (monitor.CustomName != null && (monitor.CustomName.Length > 80 || monitor.CustomName.Any(char.IsControl)))
                 throw new InvalidDataException("Monitor labels must contain at most 80 characters and no control characters.");
+            if (monitor.HardwareIdentity != null && (monitor.HardwareIdentity.Length > 256 || monitor.HardwareIdentity.Any(char.IsControl)))
+                throw new InvalidDataException("Monitor identity is invalid.");
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var profile in monitor.Profiles)
             {
                 ValidateProfile(profile);
+                profile.Monitor = monitor;
+                if (validateTriggers && GetExecutableConflict(profile) is string conflict) throw new InvalidDataException(conflict);
                 if (!names.Add(profile.Name.Trim()))
                     throw new InvalidDataException("The file contains duplicate profile names on one monitor.");
             }
@@ -254,7 +280,7 @@ public static class ProfileTransferController
             throw new InvalidDataException("Brightness schedules must have unique HH:mm times and levels from 0 to 100; shortcut steps must be from 1 to 100.");
         ValidateHotkey(computer.BrightnessIncreaseKey, computer.BrightnessIncreaseModifiers);
         ValidateHotkey(computer.BrightnessDecreaseKey, computer.BrightnessDecreaseModifiers);
-        if (computer.IsBrightnessShortcutsEnabled)
+        if (validateTriggers && computer.IsBrightnessShortcutsEnabled)
         {
             var error = BrightnessAutomationController.GetShortcutValidationError(computer, true) ??
                         BrightnessAutomationController.GetShortcutValidationError(computer, false);

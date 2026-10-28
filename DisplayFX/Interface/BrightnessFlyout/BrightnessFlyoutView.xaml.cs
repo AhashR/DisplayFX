@@ -3,6 +3,8 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 
 namespace DisplayFX.Interface.BrightnessFlyout;
 
@@ -13,6 +15,7 @@ namespace DisplayFX.Interface.BrightnessFlyout;
 /// </summary>
 public partial class BrightnessFlyoutView : Window
 {
+    public System.Drawing.Point AnchorPoint { get; set; } = System.Windows.Forms.Cursor.Position;
     private bool _isClosing;
     private bool _canClose;
     private readonly TaskCompletionSource _closed = new();
@@ -73,10 +76,20 @@ public partial class BrightnessFlyoutView : Window
 
     private void PositionNearTaskbar()
     {
-        var workArea = SystemParameters.WorkArea;
-        Left = workArea.Right - ActualWidth - 12;
-        Top = workArea.Bottom - ActualHeight - 12;
+        var area = System.Windows.Forms.Screen.FromPoint(AnchorPoint).WorkingArea;
+        var handle = new WindowInteropHelper(this).Handle;
+        SetWindowPos(handle, IntPtr.Zero, area.Left + 12, area.Top + 12, 0, 0, 0x0015);
+        var scale = GetDpiForWindow(handle) / 96d;
+        if (scale <= 0) scale = 1;
+        var width = (int)System.Math.Ceiling(ActualWidth * scale);
+        var height = (int)System.Math.Ceiling(ActualHeight * scale);
+        var x = System.Math.Clamp(AnchorPoint.X - width + 20, area.Left, System.Math.Max(area.Left, area.Right - width));
+        var y = AnchorPoint.Y > area.Top + area.Height / 2 ? System.Math.Max(area.Top, area.Bottom - height - 12) : area.Top + 12;
+        SetWindowPos(handle, IntPtr.Zero, x, y, 0, 0, 0x0015);
     }
+
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr window);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
 
     private void TurnOffMonitors_Click(object sender, RoutedEventArgs e)
     {

@@ -61,8 +61,8 @@ internal static class UiSmokeChecks
             var settingsModel = new SettingsViewModel(computer, new RegistryController(), settingsData, feedback);
             var settingsView = new SettingsView { DataContext = settingsModel };
             count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings");
-            if (settingsView.WindowStyle != WindowStyle.SingleBorderWindow || Descendants<ScrollViewer>((FrameworkElement)settingsView.Content).Any(scroll => scroll.Content is Panel))
-                throw new InvalidOperationException("Settings must be a draggable window with all options visible without scrolling.");
+            if (settingsView.WindowStyle != WindowStyle.SingleBorderWindow || settingsView.Content is not ScrollViewer)
+                throw new InvalidOperationException("Settings must have a native title bar and a scrolling fallback for small screens.");
             if (((FrameworkElement)settingsView.Content).ActualHeight > 550)
                 throw new InvalidOperationException("Settings must fit within a compact screen height.");
             count++;
@@ -86,6 +86,26 @@ internal static class UiSmokeChecks
             count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings-many-times");
             if (settingsModel.VisibleSchedules.Count() != SettingsViewModel.SchedulePageSize || ((FrameworkElement)settingsView.Content).ActualHeight > 550)
                 throw new InvalidOperationException("Many daily times must remain accessible without growing or scrolling the settings window.");
+            count++;
+
+            var settingsScroll = (ScrollViewer)settingsView.Content;
+            settingsScroll.Measure(new Size(480, 280));
+            settingsScroll.Arrange(new Rect(0, 0, 480, 280));
+            settingsScroll.UpdateLayout();
+            if (settingsScroll.ExtentHeight <= settingsScroll.ViewportHeight || settingsScroll.ExtentWidth <= settingsScroll.ViewportWidth)
+                throw new InvalidOperationException("Settings must remain scrollable at constrained high-DPI work-area sizes.");
+            count++;
+            count += Render(settingsScroll, 698, outputDirectory, "settings-scroll-fallback");
+            settingsModel.PreviousSchedulePage();
+            count += Render(settingsScroll, 698, outputDirectory, "settings-validation-page");
+            var brightnessField = Descendants<TextBox>(settingsScroll).First(field => field.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path == nameof(BrightnessSchedule.BrightnessInput));
+            brightnessField.Text = "invalid";
+            brightnessField.GetBindingExpression(TextBox.TextProperty)!.UpdateSource();
+            settingsModel.NextSchedulePage();
+            count += Render(settingsScroll, 698, outputDirectory, "settings-validation-next-page");
+            settingsModel.SaveBrightnessAutomation();
+            if (settingsModel.SettingsStatus == "Brightness settings saved." || !settingsModel.BrightnessSchedules.Any(schedule => !schedule.IsValid))
+                throw new InvalidOperationException("Paging must preserve invalid raw drafts and block saving them.");
             count++;
 
             var monitorModel = new MonitorViewModel(monitor, null!);
@@ -151,6 +171,8 @@ internal static class UiSmokeChecks
             var closingModel = (BrightnessFlyoutViewModel)RuntimeHelpers.GetUninitializedObject(typeof(BrightnessFlyoutViewModel));
             typeof(BrightnessFlyoutViewModel).GetField("<Monitors>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(closingModel, new ObservableCollection<BrightnessMonitorViewModel> { firstRow, secondRow });
+            typeof(BrightnessFlyoutViewModel).GetField("<Initialization>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(closingModel, Task.CompletedTask);
             var closingView = new BrightnessFlyoutView { DataContext = closingModel };
             firstRow.Brightness = 90;
             BrightnessFeatureRegressionChecks.Pump(async () =>

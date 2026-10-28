@@ -8,7 +8,12 @@ namespace DisplayFX.Interface.Settings;
 
 public partial class SettingsView : Window
 {
-    public SettingsView() => InitializeComponent();
+    public SettingsView()
+    {
+        InitializeComponent();
+        MaxWidth = System.Math.Max(240, SystemParameters.WorkArea.Width - 24);
+        MaxHeight = System.Math.Max(240, SystemParameters.WorkArea.Height - 32);
+    }
     private void IncreaseShortcut_Click(object sender, RoutedEventArgs e)
     {
         if (DataContext is SettingsViewModel model) model.BeginRecording(true);

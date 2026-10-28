@@ -286,6 +286,8 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         _profile.LinkedExecutablePath = _linkedExecutablePath;
         try
         {
+            if (DisplayFX.Global.Controllers.ProfileTransferController.GetExecutableConflict(_profile) is string conflict)
+                throw new InvalidOperationException(conflict);
             persist();
         }
         catch

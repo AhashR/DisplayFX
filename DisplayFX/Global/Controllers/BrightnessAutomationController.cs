@@ -31,7 +31,10 @@ public class BrightnessAutomationController : IDisposable
     private Task _worker = Task.CompletedTask;
     private bool _processingRequests;
     private int _operationVersion;
-    private sealed record AutomationRequest(long? Delta, int? Brightness, string Source, DateTime? ScheduleSince = null);
+    private sealed record AutomationRequest(long? Delta, int? Brightness, string Source, DateTime? ScheduleSince = null,
+        string? OnlyDevicePath = null, long? ExpectedVersion = null, int RetryAttempt = 0);
+    private sealed record ScheduleRetry(AutomationRequest Request, long Version, DateTime Due);
+    private readonly Dictionary<string, ScheduleRetry> _scheduleRetries = new(StringComparer.OrdinalIgnoreCase);
 
     public BrightnessAutomationController(DisplayCache displayCache, MonitorBrightnessController brightnessController,
         BrightnessPersistenceController persistence, ILogger logger)
@@ -82,6 +85,7 @@ public class BrightnessAutomationController : IDisposable
         _brightnessController.DisplayPowerChanged -= OnDisplayPowerChanged;
         Interlocked.Increment(ref _operationVersion);
         _pendingRequests.Clear();
+        _scheduleRetries.Clear();
         if (_timer is not null)
         {
             _timer.Stop();
@@ -106,6 +110,7 @@ public class BrightnessAutomationController : IDisposable
         _lastScheduleCheck = LocalNow;
         Interlocked.Increment(ref _operationVersion);
         _pendingRequests.Clear();
+        _scheduleRetries.Clear();
         ShortcutError = null;
         UpdateScheduleStatus();
         RefreshHotkeys();
@@ -236,7 +241,8 @@ public class BrightnessAutomationController : IDisposable
                 for (var node = _pendingRequests.First; node != null;)
                 {
                     var next = node.Next;
-                    if (node.Value.ScheduleSince.HasValue) _pendingRequests.Remove(node);
+                    if (node.Value.ScheduleSince.HasValue && (request.OnlyDevicePath == null ||
+                        string.Equals(request.OnlyDevicePath, node.Value.OnlyDevicePath, StringComparison.OrdinalIgnoreCase))) _pendingRequests.Remove(node);
                     node = next;
                 }
             }
@@ -269,26 +275,39 @@ public class BrightnessAutomationController : IDisposable
     {
         try
         {
+            var expectedPaths = computer.Monitors.Select(monitor => monitor.DisplayDevicePath).ToArray();
             var result = await Task.Run(() =>
             {
                 var applied = new List<(Display Display, int Brightness)>();
+                var failed = new List<(string Path, long Version)>();
                 var failures = 0;
                 var deferred = false;
-                foreach (var display in GetConnectedDisplays())
+                var displays = GetConnectedDisplays();
+                foreach (var display in displays)
                 {
+                    if (request.OnlyDevicePath != null && !string.Equals(display.DevicePath, request.OnlyDevicePath, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (request.ExpectedVersion.HasValue && request.ExpectedVersion != _brightnessController.GetVersion(display)) continue;
                     if (version != Volatile.Read(ref _operationVersion)) break;
                     if (_brightnessController.IsDisplaySleeping) { deferred = true; break; }
-                    if (!_brightnessController.SupportsBrightness(display)) continue;
-                    var current = request.Delta.HasValue ? _brightnessController.GetBrightness(display) : request.Brightness;
-                    if (!current.HasValue) { failures++; continue; }
-                    var brightness = (int)Math.Clamp(current.Value + (request.Delta ?? 0), 0, 100);
+                    if (!_brightnessController.SupportsBrightness(display))
+                    {
+                        if (request.ScheduleSince.HasValue) { failures++; failed.Add((display.DevicePath, _brightnessController.GetVersion(display))); }
+                        continue;
+                    }
                     if (version != Volatile.Read(ref _operationVersion)) break;
                     if (_brightnessController.IsDisplaySleeping) { deferred = true; break; }
-                    if (_brightnessController.SetBrightness(display, brightness)) applied.Add((display, brightness));
+                    var brightness = request.Delta.HasValue ? _brightnessController.AdjustBrightness(display, request.Delta.Value) :
+                        (request.ExpectedVersion.HasValue ? _brightnessController.SetBrightnessIfCurrent(display, request.Brightness!.Value, request.ExpectedVersion.Value) :
+                            _brightnessController.SetBrightness(display, request.Brightness!.Value)) ? request.Brightness : null;
+                    if (brightness.HasValue) applied.Add((display, brightness.Value));
                     else if (_brightnessController.IsDisplaySleeping) { deferred = true; break; }
-                    else failures++;
+                    else { failures++; failed.Add((display.DevicePath, _brightnessController.GetVersion(display))); }
                 }
-                return (Applied: applied, Failures: failures, Deferred: deferred);
+                if (request.ScheduleSince.HasValue)
+                    foreach (var path in expectedPaths.Where(path => (request.OnlyDevicePath == null || string.Equals(path, request.OnlyDevicePath, StringComparison.OrdinalIgnoreCase)) &&
+                        !displays.Any(display => string.Equals(display.DevicePath, path, StringComparison.OrdinalIgnoreCase))))
+                        failed.Add((path, request.ExpectedVersion ?? 0));
+                return (Applied: applied, Failures: failures, Deferred: deferred, Failed: failed);
             });
             if (version != _operationVersion || !ReferenceEquals(computer, _computer)) return;
             // Continuations run on the dispatcher; only the UI thread updates the live settings model.
@@ -298,6 +317,10 @@ public class BrightnessAutomationController : IDisposable
                 if (!latest.HasValue || latest.Value == applied.Brightness)
                     _persistence.Remember(applied.Display, applied.Brightness);
             }
+            if (request.ScheduleSince.HasValue && !result.Deferred && request.RetryAttempt < 8)
+                foreach (var failed in result.Failed)
+                    _scheduleRetries[failed.Path] = new ScheduleRetry(request with { OnlyDevicePath = failed.Path,
+                        ExpectedVersion = failed.Version, RetryAttempt = request.RetryAttempt + 1 }, failed.Version, LocalNow.AddSeconds(15));
             if (result.Deferred && request.ScheduleSince.HasValue)
             {
                 if (request.ScheduleSince.Value < _lastScheduleCheck) _lastScheduleCheck = request.ScheduleSince.Value;
@@ -342,7 +365,16 @@ public class BrightnessAutomationController : IDisposable
         _lastScheduleCheck = now;
         var schedule = FindLatestDueSchedule(_computer.BrightnessSchedules, previous, now);
         if (schedule is not null)
+        {
+            _scheduleRetries.Clear();
             _ = Enqueue(new AutomationRequest(null, schedule.Brightness, $"Daily schedule at {schedule.Time}", previous));
+        }
+        else
+            foreach (var retry in _scheduleRetries.Where(pair => pair.Value.Due <= now).ToList())
+            {
+                _scheduleRetries.Remove(retry.Key);
+                _ = Enqueue(retry.Value.Request);
+            }
     }
 
     private void UpdateScheduleStatus()

@@ -28,19 +28,21 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
     private bool _hasError;
     private bool _refreshing;
     private bool _hasKnownBrightness;
+    private long _editVersion;
 
     public BrightnessMonitorViewModel(Display display, MonitorBrightnessController brightnessController,
         Action<BrightnessMonitorViewModel, double>? brightnessChanged = null,
-        Action<Display, int>? brightnessApplied = null, string? name = null, int? rememberedBrightness = null)
+        Action<Display, int>? brightnessApplied = null, string? name = null, int? rememberedBrightness = null,
+        bool deferInitialization = false)
     {
         Display = display;
         _brightnessController = brightnessController;
         _brightnessChanged = brightnessChanged;
         _brightnessApplied = brightnessApplied;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
-        Name = string.IsNullOrWhiteSpace(name) ? ResolveName(display) : name;
-        var current = brightnessController.GetBrightness(display);
-        SupportsBrightness = !brightnessController.IsDisplaySleeping && (current.HasValue || brightnessController.SupportsBrightness(display));
+        Name = string.IsNullOrWhiteSpace(name) ? (deferInitialization ? "Monitor" : ResolveName(display)) : name;
+        var current = deferInitialization ? null : brightnessController.GetBrightness(display);
+        SupportsBrightness = !brightnessController.IsDisplaySleeping && (deferInitialization || current.HasValue || brightnessController.SupportsBrightness(display));
         var known = current ?? brightnessController.GetLastKnownBrightness(display) ?? rememberedBrightness;
         _brightness = known ?? 0;
         _hasKnownBrightness = known.HasValue;
@@ -54,10 +56,23 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
         _recoveryTimer.Start();
         brightnessController.StatusChanged += OnStatusChanged;
         brightnessController.DisplayPowerChanged += OnDisplayPowerChanged;
+        if (deferInitialization) _ = InitializeAsync(string.IsNullOrWhiteSpace(name));
+    }
+
+    private async Task InitializeAsync(bool resolveName)
+    {
+        if (resolveName)
+        {
+            var name = await Task.Run(() => ResolveName(Display));
+            if (_disposed) return;
+            Name = name;
+            NotifyOfPropertyChange(nameof(Name));
+        }
+        await RefreshBrightnessAsync();
     }
 
     public Display Display { get; private set; }
-    public string Name { get; }
+    public string Name { get; private set; }
     public bool SupportsBrightness { get; private set; }
     public string BrightnessText => _hasKnownBrightness ? $"{_brightness:0}%" : "—";
     public string StatusMessage
@@ -83,6 +98,7 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
         if (_disposed || !SupportsBrightness || !double.IsFinite(value)) return;
         var target = (int)Math.Round(Math.Clamp(value, 0, 100));
         if (target == _brightness && !HasError) return;
+        _editVersion++;
         _brightness = target;
         _hasKnownBrightness = true;
         _pendingBrightness = target;
@@ -124,7 +140,8 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
                     if (!_pendingBrightness.HasValue && !_disposed)
                         applied = await Task.Run(() => _brightnessController.SetBrightness(Display, target));
                 }
-                if (applied) _brightnessApplied?.Invoke(Display, target);
+                var latest = _brightnessController.GetLastKnownBrightness(Display);
+                if (applied && (!latest.HasValue || latest == target)) _brightnessApplied?.Invoke(Display, target);
                 if (!_pendingBrightness.HasValue && !_disposed)
                 {
                     HasError = !applied;
@@ -138,7 +155,16 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
             HasError = true;
             StatusMessage = "Could not apply or remember brightness. Check the monitor connection and settings folder.";
         }
-        finally { _writeInFlight = false; }
+        finally
+        {
+            _writeInFlight = false;
+            if (!_disposed && !_pendingBrightness.HasValue && _brightnessController.GetLastKnownBrightness(Display) is int latest)
+            {
+                _brightness = latest;
+                NotifyOfPropertyChange(nameof(Brightness));
+                NotifyOfPropertyChange(nameof(BrightnessText));
+            }
+        }
     }
 
     /// <summary>Includes in-flight and final pending input, even when closing before the timer fires.</summary>
@@ -176,14 +202,17 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
         if (_disposed || _refreshing || _writeInFlight || _pendingBrightness.HasValue || _brightnessController.IsDisplaySleeping) return;
         if (updatedDisplay != null && string.Equals(updatedDisplay.DevicePath, Display.DevicePath, StringComparison.OrdinalIgnoreCase)) Display = updatedDisplay;
         _refreshing = true;
+        var editVersion = _editVersion;
         try
         {
-            var (current, supported) = await Task.Run(() =>
+            var (current, supported, version) = await Task.Run(() =>
             {
                 var brightness = _brightnessController.GetBrightness(Display);
-                return (brightness, brightness.HasValue || _brightnessController.SupportsBrightness(Display));
+                return (brightness, brightness.HasValue || _brightnessController.SupportsBrightness(Display), _brightnessController.GetVersion(Display));
             });
-            if (_disposed || _writeInFlight || _pendingBrightness.HasValue || _brightnessController.IsDisplaySleeping) return;
+            if (_disposed || editVersion != _editVersion || version != _brightnessController.GetVersion(Display) ||
+                _writeInFlight || _pendingBrightness.HasValue || _brightnessController.IsDisplaySleeping) return;
+            current = _brightnessController.GetLastKnownBrightness(Display) ?? current;
             SupportsBrightness = supported;
             HasError = !current.HasValue;
             StatusMessage = current.HasValue ? "" : supported
@@ -201,9 +230,10 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
     private void OnStatusChanged(Display display, BrightnessStatus status)
     {
         if (!string.Equals(display.DevicePath, Display.DevicePath, StringComparison.OrdinalIgnoreCase)) return;
+        var version = _brightnessController.GetVersion(display);
         void Update()
         {
-            if (_disposed || _refreshing || _writeInFlight || _pendingBrightness.HasValue || _brightnessController.IsDisplaySleeping) return;
+            if (_disposed || version != _brightnessController.GetVersion(display) || _refreshing || _writeInFlight || _pendingBrightness.HasValue || _brightnessController.IsDisplaySleeping) return;
             HasError = status.IsError;
             StatusMessage = status.IsError ? status.Message : "";
             if (!status.IsError && status.Brightness.HasValue)

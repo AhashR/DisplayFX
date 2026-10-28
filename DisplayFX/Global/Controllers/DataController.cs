@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using FluentResults;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using DisplayFX.Objects.Entities;
 
 namespace DisplayFX.Global.Controllers;
@@ -87,9 +88,14 @@ public class DataController
 
     private static Computer Read(string path)
     {
-        var computer = JsonConvert.DeserializeObject<Computer>(File.ReadAllText(path));
+        if (new FileInfo(path).Length > 5 * 1024 * 1024) throw new InvalidDataException("Settings exceed 5 MB.");
+        using var reader = new JsonTextReader(new StringReader(File.ReadAllText(path))) { MaxDepth = 64 };
+        var document = JObject.Load(reader, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+        if (reader.Read()) throw new InvalidDataException("Settings contain trailing data.");
+        var computer = document.ToObject<Computer>();
         if (computer?.Monitors == null)
             throw new InvalidDataException("Settings contain no computer or monitor list.");
+        ProfileTransferController.ValidateStoredComputer(computer);
         if (computer.BrightnessSchedules == null || computer.BrightnessSchedules.Any(schedule => schedule == null || !schedule.IsValid) ||
             computer.BrightnessSchedules.Count > 100 || computer.BrightnessShortcutStep is < 1 or > 100)
             throw new InvalidDataException("Settings contain an invalid brightness schedule or shortcut step.");

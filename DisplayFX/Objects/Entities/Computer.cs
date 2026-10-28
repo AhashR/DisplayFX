@@ -11,6 +11,7 @@ public class Computer
     public bool IsStartMinimized { get; set; }
     public bool IsMinimizeToTray { get; set; }
     public bool IsBrightnessLinked { get; set; }
+    public bool IsColorDiagnosticsEnabled { get; set; }
     public bool IsBrightnessShortcutsEnabled { get; set; }
     public int BrightnessShortcutStep { get; set; } = 10;
     public ModifierKeys? BrightnessIncreaseModifiers { get; set; } = ModifierKeys.Control | ModifierKeys.Alt;

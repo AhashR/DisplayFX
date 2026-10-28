@@ -1,0 +1,18 @@
+name: Windows regression tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore DisplayFX.sln
+      - run: dotnet build DisplayFX.sln -c Release --no-restore
+      - run: dotnet run --project tests/DisplayFX.RegressionTests -c Release --no-build

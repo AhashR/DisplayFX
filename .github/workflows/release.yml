@@ -1,0 +1,41 @@
+name: Publish Windows release
+on:
+  push:
+    branches: [main]
+    paths: ['DisplayFX/DisplayFX.csproj', '.github/workflows/release.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore DisplayFX.sln
+      - run: dotnet build DisplayFX.sln -c Release --no-restore
+      - run: dotnet run --project tests/DisplayFX.RegressionTests -c Release --no-build
+      - name: Install verified installer compiler
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $installer
+          $signature = Get-AuthenticodeSignature $installer
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Pyrsys B.V.*') { throw 'Installer compiler signature verification failed.' }
+          $directory = Join-Path $env:RUNNER_TEMP 'InnoSetup'
+          $process = Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/NOICONS',"/DIR=$directory") -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Compiler installation failed.' }
+          "INNO_COMPILER=$directory\ISCC.exe" >> $env:GITHUB_ENV
+      - name: Build installer
+        shell: pwsh
+        run: ./build_installer.ps1 -InnoCompiler $env:INNO_COMPILER
+      - name: Publish verified release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/Publish-Release.ps1 -Commit $env:GITHUB_SHA -Repository $env:GITHUB_REPOSITORY

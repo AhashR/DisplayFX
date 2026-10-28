@@ -63,6 +63,7 @@ public class DisplayWindowManager
         dynamic settings = new ExpandoObject();
         settings.Title = "Settings";
         settings.MaxHeight = Math.Max(320, SystemParameters.WorkArea.Height - 32);
+        settings.MaxWidth = Math.Max(240, SystemParameters.WorkArea.Width - 24);
         settings.SizeToContent = SizeToContent.WidthAndHeight;
         settings.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         settings.ResizeMode = ResizeMode.CanMinimize;
