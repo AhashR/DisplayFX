@@ -15,8 +15,9 @@ namespace DisplayFX.Global.Controllers;
 /// <summary>Versioned backups and validated, detached profile imports. Never talks to monitor hardware.</summary>
 public static class ProfileTransferController
 {
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
     public const int MaximumNameLength = 80;
+    public const int MaximumProfilesPerMonitor = 100;
     private const int MaximumFileSize = 5 * 1024 * 1024;
     private const string ProfileFormat = "DisplayFX.Profile";
     private const string SettingsFormat = "DisplayFX.Settings";
@@ -56,12 +57,16 @@ public static class ProfileTransferController
     public static Profile CloneProfile(Profile source, Monitor target, string name, bool includeTriggers = false)
     {
         ValidateProfile(source);
-        return new Profile(target, ValidateName(name), new ProfileSetting(source.ProfileSetting.Brightness,
-            source.ProfileSetting.Contrast, source.ProfileSetting.Gamma, source.ProfileSetting.DigitalVibrance), false)
+        return new Profile(target, ValidateName(name), source.ProfileSetting.Copy(), false)
         {
             HotkeyModifiers = includeTriggers ? source.HotkeyModifiers : null,
             HotkeyKey = includeTriggers ? source.HotkeyKey : null,
             LinkedExecutablePath = includeTriggers ? source.LinkedExecutablePath : null
+            , Notes = source.Notes, Icon = source.Icon, MarkerColor = source.MarkerColor,
+            AdditionalExecutablePaths = includeTriggers ? new(source.AdditionalExecutablePaths) : new(),
+            RulePriority = includeTriggers ? source.RulePriority : 0,
+            FullscreenOnly = includeTriggers && source.FullscreenOnly,
+            PowerCondition = includeTriggers ? source.PowerCondition : "Any"
         };
     }
 
@@ -92,10 +97,12 @@ public static class ProfileTransferController
 
     public static string? GetExecutableConflict(Profile profile)
     {
-        if (string.IsNullOrWhiteSpace(profile.LinkedExecutablePath)) return null;
-        return profile.Monitor.Profiles.Any(other => !ReferenceEquals(other, profile) &&
-            (ProcessController.MatchesExecutable(other.LinkedExecutablePath, profile.LinkedExecutablePath) ||
-             ProcessController.MatchesExecutable(profile.LinkedExecutablePath, other.LinkedExecutablePath)))
+        var paths = profile.AdditionalExecutablePaths.Concat(new[] { profile.LinkedExecutablePath }).Where(path => !string.IsNullOrWhiteSpace(path)).ToList();
+        if (paths.Count == 0) return null;
+        return profile.Monitor.Profiles.Any(other => !ReferenceEquals(other, profile) && other.RulePriority == profile.RulePriority &&
+            (profile.PowerCondition == "Any" || other.PowerCondition == "Any" || profile.PowerCondition == other.PowerCondition) &&
+            other.AdditionalExecutablePaths.Concat(new[] { other.LinkedExecutablePath }).Any(otherPath => paths.Any(path =>
+                ProcessController.MatchesExecutable(otherPath, path) || ProcessController.MatchesExecutable(path, otherPath))))
             ? "This application is already linked to another profile on this monitor. Unlink it there first." : null;
     }
 
@@ -124,6 +131,7 @@ public static class ProfileTransferController
         ValidateComputer(current);
         ValidateComputer(imported);
         var merged = CloneComputer(imported);
+        var profileMap = new Dictionary<(string Path, Guid Id), (string Path, Guid Id)>();
         merged.Monitors = CloneComputer(current).Monitors;
         // A merge preserves the current active profile.
         var importedNameCounts = imported.Monitors.GroupBy(monitor => monitor.Name, StringComparer.OrdinalIgnoreCase)
@@ -145,21 +153,30 @@ public static class ProfileTransferController
                 // Retain disconnected displays so a later reconnect can recover their configuration.
                 var disconnected = CloneComputer(new Computer { Monitors = new List<Monitor> { source } }).Monitors[0];
                 merged.Monitors.Add(disconnected);
+                foreach (var profile in disconnected.Profiles) profileMap[(source.DisplayDevicePath.ToUpperInvariant(), profile.Id)] = (disconnected.DisplayDevicePath, profile.Id);
                 continue;
             }
 
             foreach (var profile in source.Profiles)
             {
-                if (target.Profiles.Any(existing => ProfilesEquivalent(existing, profile, source.Profiles)))
+                var equivalent = target.Profiles.FirstOrDefault(existing => ProfilesEquivalent(existing, profile, source.Profiles));
+                if (equivalent != null)
+                {
+                    profileMap[(source.DisplayDevicePath.ToUpperInvariant(), profile.Id)] = (target.DisplayDevicePath, equivalent.Id);
                     continue;
-                if (target.Profiles.Count >= 5)
-                    throw new InvalidDataException($"Import would exceed five profiles on {target.DisplayName}. Export or remove an unused profile, then retry.");
+                }
+                if (target.Profiles.Count >= MaximumProfilesPerMonitor)
+                    throw new InvalidDataException($"Import would exceed {MaximumProfilesPerMonitor} profiles on {target.DisplayName}. Export or remove an unused profile, then retry.");
                 var copy = CloneProfile(profile, target, GetUniqueName(target, profile.Name), true);
                 copy.ImportedProfileName = profile.Name;
                 target.Profiles.Add(copy);
+                profileMap[(source.DisplayDevicePath.ToUpperInvariant(), profile.Id)] = (target.DisplayDevicePath, copy.Id);
             }
         }
 
+        foreach (var entry in merged.Features.ProfileSets.SelectMany(set => set.Entries))
+            if (profileMap.TryGetValue((entry.DevicePath.ToUpperInvariant(), entry.ProfileId), out var mapped))
+            { entry.DevicePath = mapped.Path; entry.ProfileId = mapped.Id; }
         ValidateComputer(merged);
         NormalizeProfiles(merged);
         return merged;
@@ -203,7 +220,11 @@ public static class ProfileTransferController
         first.ProfileSetting.Contrast == second.ProfileSetting.Contrast &&
         first.ProfileSetting.Gamma == second.ProfileSetting.Gamma &&
         first.ProfileSetting.DigitalVibrance == second.ProfileSetting.DigitalVibrance &&
+        first.ProfileSetting.RedGain == second.ProfileSetting.RedGain && first.ProfileSetting.GreenGain == second.ProfileSetting.GreenGain && first.ProfileSetting.BlueGain == second.ProfileSetting.BlueGain && first.ProfileSetting.TemperatureKelvin == second.ProfileSetting.TemperatureKelvin &&
         first.HotkeyKey == second.HotkeyKey && first.HotkeyModifiers == second.HotkeyModifiers &&
+        first.AdditionalExecutablePaths.SequenceEqual(second.AdditionalExecutablePaths, StringComparer.OrdinalIgnoreCase) &&
+        first.RulePriority == second.RulePriority && first.FullscreenOnly == second.FullscreenOnly && first.PowerCondition == second.PowerCondition &&
+        first.Notes == second.Notes && first.Icon == second.Icon && first.MarkerColor == second.MarkerColor &&
         string.Equals(first.LinkedExecutablePath, second.LinkedExecutablePath, StringComparison.OrdinalIgnoreCase);
 
     private static string ValidateName(string? name)
@@ -221,12 +242,21 @@ public static class ProfileTransferController
         if (profile?.ProfileSetting == null)
             throw new InvalidDataException("A profile is missing its color settings.");
         ValidateName(profile.Name);
+        if (profile.Id == Guid.Empty) throw new InvalidDataException("Profile identity is invalid.");
+        if (profile.Notes == null || profile.Notes.Length > 4000 || profile.Icon == null || profile.Icon.Length > 8 ||
+            profile.AdditionalExecutablePaths == null || profile.AdditionalExecutablePaths.Count > 32 ||
+            profile.AdditionalExecutablePaths.Any(path => string.IsNullOrWhiteSpace(path) || path.Length > 2048 || path.Any(char.IsControl)) ||
+            profile.PowerCondition is not ("Any" or "AC" or "Battery") || profile.RulePriority is < -100 or > 100 ||
+            profile.MarkerColor == null || !System.Text.RegularExpressions.Regex.IsMatch(profile.MarkerColor, "^#[0-9a-fA-F]{6}$"))
+            throw new InvalidDataException("Profile metadata or application rules are invalid.");
         if (profile.ImportedProfileName != null) ValidateName(profile.ImportedProfileName);
         var settings = profile.ProfileSetting;
         ValidateRange(settings.Brightness, 0, 1, "brightness");
         ValidateRange(settings.Contrast, 0, 1, "contrast");
         ValidateRange(settings.Gamma, 0.4, 2.8, "gamma");
         ValidateRange(settings.DigitalVibrance, 0, 1, "digital vibrance");
+        ValidateRange(settings.RedGain, 0, 1, "red gain"); ValidateRange(settings.GreenGain, 0, 1, "green gain"); ValidateRange(settings.BlueGain, 0, 1, "blue gain");
+        ValidateRange(settings.TemperatureKelvin, 2500, 10000, "temperature tint");
         ValidateHotkey(profile.HotkeyKey, profile.HotkeyModifiers);
         if (profile.LinkedExecutablePath != null && (profile.LinkedExecutablePath.Length > 2048 || profile.LinkedExecutablePath.Any(char.IsControl)))
             throw new InvalidDataException("The linked executable path is invalid.");
@@ -251,6 +281,8 @@ public static class ProfileTransferController
     {
         if (computer?.Monitors == null || computer.Monitors.Count > 64)
             throw new InvalidDataException("The file contains an invalid monitor list.");
+        if (computer.Features == null || computer.Features.Validate() is string)
+            throw new InvalidDataException(computer.Features?.Validate() ?? "Missing application preferences.");
         var devicePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var monitor in computer.Monitors)
         {
@@ -258,13 +290,17 @@ public static class ProfileTransferController
                 monitor.DisplayDevicePath.Length > 2048 || monitor.DisplayDevicePath.Any(char.IsControl) ||
                 !devicePaths.Add(monitor.DisplayDevicePath) || string.IsNullOrWhiteSpace(monitor.Name) ||
                 monitor.Name.Length > 256 || monitor.Name.Any(char.IsControl) || monitor.Profiles == null ||
-                monitor.Profiles.Count == 0 || monitor.Profiles.Count > 5 || monitor.LastBrightness is < 0 or > 100)
+                monitor.Profiles.Count == 0 || monitor.Profiles.Count > MaximumProfilesPerMonitor || monitor.LastBrightness is < 0 or > 100)
                 throw new InvalidDataException("The file contains an invalid monitor, duplicate monitor, or brightness setting.");
             if (monitor.CustomName != null && (monitor.CustomName.Length > 80 || monitor.CustomName.Any(char.IsControl)))
                 throw new InvalidDataException("Monitor labels must contain at most 80 characters and no control characters.");
+            if (monitor.BrightnessGroup == null || monitor.BrightnessGroup.Length > 80 || monitor.MinimumBrightness is < 0 or > 100 ||
+                monitor.MaximumBrightness is < 0 or > 100 || monitor.MinimumBrightness > monitor.MaximumBrightness || monitor.BrightnessOffset is < -100 or > 100)
+                throw new InvalidDataException("Monitor brightness limits, offset or group are invalid.");
             if (monitor.HardwareIdentity != null && (monitor.HardwareIdentity.Length > 256 || monitor.HardwareIdentity.Any(char.IsControl)))
                 throw new InvalidDataException("Monitor identity is invalid.");
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var identities = new HashSet<Guid>();
             foreach (var profile in monitor.Profiles)
             {
                 ValidateProfile(profile);
@@ -272,13 +308,16 @@ public static class ProfileTransferController
                 if (validateTriggers && GetExecutableConflict(profile) is string conflict) throw new InvalidDataException(conflict);
                 if (!names.Add(profile.Name.Trim()))
                     throw new InvalidDataException("The file contains duplicate profile names on one monitor.");
+                if (!identities.Add(profile.Id)) throw new InvalidDataException("The file contains duplicate profile identities on one monitor.");
             }
         }
         if (computer.BrightnessShortcutStep is < 1 or > 100 || computer.BrightnessSchedules == null ||
             computer.BrightnessSchedules.Count > 100 || computer.BrightnessSchedules.Any(schedule => schedule == null || !schedule.IsValid) ||
-            computer.BrightnessSchedules.GroupBy(schedule => schedule.Time).Any(group => group.Count() > 1))
+            BrightnessAutomationController.HasScheduleConflicts(computer.BrightnessSchedules))
             throw new InvalidDataException("Brightness schedules must have unique HH:mm times and levels from 0 to 100; shortcut steps must be from 1 to 100.");
         ValidateHotkey(computer.BrightnessIncreaseKey, computer.BrightnessIncreaseModifiers);
+        if (computer.IsBrightnessScheduleEnabled && computer.BrightnessSchedules.Any(schedule => schedule.SolarEvent != "Fixed") && !computer.Features.SolarLatitude.HasValue)
+            throw new InvalidDataException("Solar schedules need a saved latitude and longitude before they can be enabled.");
         ValidateHotkey(computer.BrightnessDecreaseKey, computer.BrightnessDecreaseModifiers);
         if (validateTriggers && computer.IsBrightnessShortcutsEnabled)
         {
@@ -321,9 +360,9 @@ public static class ProfileTransferController
         using var reader = new JsonTextReader(new StringReader(File.ReadAllText(path))) { MaxDepth = 32 };
         var document = JObject.Load(reader, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
         if (document["Format"]?.Type != JTokenType.String || document.Value<string>("Format") != expectedFormat ||
-            document["Version"]?.Type != JTokenType.Integer || document.Value<int>("Version") != FormatVersion ||
+            document["Version"]?.Type != JTokenType.Integer || document.Value<int>("Version") is not (1 or FormatVersion) ||
             document["Data"] is not JObject payload)
-            throw new InvalidDataException("Select a supported DisplayFX export file (version 1).");
+            throw new InvalidDataException("Select a supported DisplayFX export file (version 1 or 2).");
         if (reader.Read())
             throw new InvalidDataException("The import file contains unexpected trailing data.");
         return payload;
@@ -337,6 +376,9 @@ public static class ProfileTransferController
             ["Version"] = FormatVersion,
             ["Data"] = payload
         };
+        var serialized = document.ToString(Formatting.Indented);
+        if (Encoding.UTF8.GetByteCount(serialized) > MaximumFileSize)
+            throw new InvalidDataException("The export exceeds the 5 MB import limit. Export fewer profiles.");
         var fullPath = Path.GetFullPath(path);
         var temporaryPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -345,7 +387,7 @@ public static class ProfileTransferController
                        FileShare.None, 4096, FileOptions.WriteThrough))
             {
                 using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096, true))
-                    writer.Write(document.ToString(Formatting.Indented));
+                    writer.Write(serialized);
                 stream.Flush(true);
             }
             if (File.Exists(fullPath))

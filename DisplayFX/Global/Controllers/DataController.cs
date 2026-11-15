@@ -13,9 +13,11 @@ public class DataController
 {
     private readonly object _sync = new();
     private readonly string _legacyDataPath;
+    private DateTime _lastSnapshot;
+    private bool _formatChecked;
 
     public DataController() : this(
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DisplayFX"),
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "portable.flag")) ? Path.Combine(AppContext.BaseDirectory, "Data") : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DisplayFX"),
         Path.Combine(AppContext.BaseDirectory, "Data", "Data.json"))
     {
     }
@@ -28,6 +30,32 @@ public class DataController
 
     public string DataPath { get; }
     public string BackupPath => DataPath + ".bak";
+    public string SnapshotDirectory => Path.Combine(Path.GetDirectoryName(DataPath)!, "History");
+    public string[] GetSnapshots() => Directory.Exists(SnapshotDirectory) ? Directory.GetFiles(SnapshotDirectory, "*.json").OrderByDescending(path => path, StringComparer.Ordinal).ToArray() : Array.Empty<string>();
+    public Computer ReadSnapshot(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (!string.Equals(Path.GetDirectoryName(fullPath), Path.GetFullPath(SnapshotDirectory), StringComparison.OrdinalIgnoreCase) || Path.GetExtension(fullPath) != ".json")
+            throw new InvalidDataException("Select a DisplayFX history snapshot.");
+        return Read(fullPath);
+    }
+    public string CreateSnapshot(Computer computer)
+    {
+        lock (_sync)
+        {
+            ProfileTransferController.ValidateStoredComputer(computer);
+            Directory.CreateDirectory(SnapshotDirectory);
+            var path = Path.Combine(SnapshotDirectory, DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + ".json");
+            File.WriteAllText(path, JsonConvert.SerializeObject(computer), new UTF8Encoding(false));
+            PruneSnapshots(computer.Features.BackupRetention);
+            _lastSnapshot = DateTime.UtcNow;
+            return path;
+        }
+    }
+    private void PruneSnapshots(int retention)
+    {
+        foreach (var path in GetSnapshots().Where(path => !Path.GetFileName(path).StartsWith("upgrade-before-", StringComparison.Ordinal)).Skip(Math.Clamp(retention, 1, 100))) File.Delete(path);
+    }
 
     public bool HasSavedData => File.Exists(DataPath) || File.Exists(BackupPath) ||
         (File.Exists(_legacyDataPath) && new FileInfo(_legacyDataPath).Length > 0);
@@ -95,6 +123,7 @@ public class DataController
         var computer = document.ToObject<Computer>();
         if (computer?.Monitors == null)
             throw new InvalidDataException("Settings contain no computer or monitor list.");
+        if (computer.DataFormatVersion > 2) throw new NotSupportedException("These settings were saved by a newer DisplayFX format. Upgrade DisplayFX; the file was not replaced.");
         ProfileTransferController.ValidateStoredComputer(computer);
         if (computer.BrightnessSchedules == null || computer.BrightnessSchedules.Any(schedule => schedule == null || !schedule.IsValid) ||
             computer.BrightnessSchedules.Count > 100 || computer.BrightnessShortcutStep is < 1 or > 100)
@@ -129,7 +158,32 @@ public class DataController
         {
             PreserveReferencesHandling = PreserveReferencesHandling.Objects
         });
+        if (Encoding.UTF8.GetByteCount(json) > 5 * 1024 * 1024) throw new InvalidDataException("Settings exceed the supported 5 MB size. Shorten notes or remove unused profiles before saving.");
         Directory.CreateDirectory(Path.GetDirectoryName(DataPath)!);
+        var formatSource = keepBackup && File.Exists(DataPath) ? DataPath : File.Exists(BackupPath) ? BackupPath : null;
+        if (!_formatChecked && formatSource != null)
+        {
+            JObject? previous = null;
+            try { previous = JObject.Parse(File.ReadAllText(formatSource)); } catch (JsonException) { }
+            if (previous != null && previous["DataFormatVersion"]?.ToString() != "2")
+            {
+                Directory.CreateDirectory(SnapshotDirectory);
+                var protectedBackup = Path.Combine(SnapshotDirectory, "upgrade-before-format-2.json");
+                if (!File.Exists(protectedBackup)) File.Copy(formatSource, protectedBackup);
+            }
+        }
+        _formatChecked = true;
+        if (keepBackup && data.Features.VersionedBackups && File.Exists(DataPath) && DateTime.UtcNow - _lastSnapshot >= TimeSpan.FromMinutes(1))
+        {
+            try
+            {
+                Directory.CreateDirectory(SnapshotDirectory);
+                File.Copy(DataPath, Path.Combine(SnapshotDirectory, DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + ".json"));
+                PruneSnapshots(data.Features.BackupRetention);
+                _lastSnapshot = DateTime.UtcNow;
+            }
+            catch (Exception ex) { NLog.LogManager.GetCurrentClassLogger().Warn(ex, "Could not create an automatic settings snapshot; primary atomic save will continue."); }
+        }
         var temporaryPath = DataPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {

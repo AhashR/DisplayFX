@@ -16,6 +16,7 @@ using DisplayFX.Interface.Profiles;
 using DisplayFX.Interface.Settings;
 using DisplayFX.Interface.Shell;
 using DisplayFX.Interface.BrightnessFlyout;
+using DisplayFX.Interface.Workspace;
 using DisplayFX.Objects.Entities;
 using DisplayFX.Objects.Factories;
 using Monitor = DisplayFX.Objects.Entities.Monitor;
@@ -141,16 +142,52 @@ internal static class UiSmokeChecks
                          attribute.Value.StartsWith("clr-namespace:") && !attribute.Value.Contains(";assembly=")))
                 attribute.Value += ";assembly=DisplayFX";
             foreach (var attribute in document.Descendants().Attributes("Click").ToList()) attribute.Remove();
+            foreach (var attribute in document.Descendants().Attributes().Where(attribute => attribute.Name.LocalName is "PreviewMouseLeftButtonDown" or "PreviewMouseLeftButtonUp" or "LostMouseCapture" or "PreviewKeyDown" or "PreviewKeyUp").ToList()) attribute.Remove();
             var shell = (Window)XamlReader.Parse(document.ToString());
             shell.DataContext = shellModel;
             ((Grid)shell.Content).Background = app.Resources["WindowBackgroundBrush"] as Brush;
             count += Render((FrameworkElement)shell.Content, 600, outputDirectory, "main-window");
+            var status = "NVIDIA Digital Vibrance is unavailable. Refresh displays after the driver update, or restart DisplayFX, then apply the profile again.";
+            shellModel.IsNotifying = true;
+            typeof(ShellViewModel).GetProperty("OperationStatus")!.SetValue(shellModel, status);
+            count += Render((FrameworkElement)shell.Content, 600, outputDirectory, "main-window-status");
+            if (!Descendants<TextBlock>((FrameworkElement)shell.Content).Any(text => text.Text == status && text.Visibility == Visibility.Visible && text.ActualHeight > 0))
+                throw new InvalidOperationException("Profile errors must remain readable without hovering the warning icon.");
+            count++;
             var colourSlider = Descendants<Slider>((FrameworkElement)shell.Content).First();
             Drag(colourSlider);
             if (!profileModel.ProfileSettings!.IsDirty || profile.ProfileSetting.Brightness != 0.5)
                 throw new InvalidOperationException("Dragging the colour slider must update only the editable draft.");
             count++;
             count += WindowMovementChecks.Run(shell, settingsView);
+            var workspaceModel = new WorkspaceViewModel(shellModel, settingsData, feedbackHardware, feedbackCache);
+            var workspaceView = new WorkspaceView { DataContext = workspaceModel };
+            ViewModelBinder.Bind(workspaceModel, workspaceView, null);
+            var workspaceContent = (FrameworkElement)workspaceView.Content;
+            workspaceContent.Height = 650;
+            var workspaceTabs = Descendants<TabControl>(workspaceContent).Single();
+            var names = new[] { "appearance", "profiles", "automation", "hardware", "diagnostics", "backups", "updates" };
+            for (var tab = 0; tab < workspaceTabs.Items.Count; tab++)
+            {
+                workspaceTabs.SelectedIndex = tab;
+                count += Render(workspaceContent, 900, outputDirectory, "workspace-" + names[tab]);
+                if (workspaceContent.ActualHeight > 650 || workspaceContent.ActualWidth > 901)
+                    throw new InvalidOperationException("Workspace tabs must remain constrained and scrollable.");
+            }
+            workspaceTabs.SelectedIndex = 0;
+            var priorTheme = workspaceModel.Preferences.Theme;
+            AppearanceController.Apply(new() { Theme = "Light", Language = "nl", TextScalePercent = 200 });
+            count += Render(workspaceContent, 900, outputDirectory, "workspace-nl-light-200");
+            if (!Descendants<TextBlock>(workspaceContent).Any(text => text.Text == "Thema") ||
+                !Descendants<Button>(workspaceContent).Any(button => Equals(button.Content, "Voorkeuren toepassen")))
+                throw new InvalidOperationException("Dutch localization must update dynamic labels without recreating the view.");
+            count++;
+            if (workspaceModel.Preferences.Theme != priorTheme || workspaceModel.Preferences.Density == null)
+                throw new InvalidOperationException("Changing language must not clear stored choice identifiers.");
+            count++;
+            AppearanceController.Apply(new() { Theme = "Dark", Language = "en" });
+            BrightnessFeatureRegressionChecks.Pump(async () => await workspaceModel.DisposeAsync());
+            workspaceView.Close();
             shell.Close();
 
             var flyoutDocument = XDocument.Load(Path.Combine(repo.FullName, "DisplayFX", "Interface", "BrightnessFlyout", "BrightnessFlyoutView.xaml"));

@@ -29,13 +29,17 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
     private bool _refreshing;
     private bool _hasKnownBrightness;
     private long _editVersion;
+    private readonly int _minimumBrightness;
+    private readonly int _maximumBrightness;
 
     public BrightnessMonitorViewModel(Display display, MonitorBrightnessController brightnessController,
         Action<BrightnessMonitorViewModel, double>? brightnessChanged = null,
         Action<Display, int>? brightnessApplied = null, string? name = null, int? rememberedBrightness = null,
-        bool deferInitialization = false)
+        bool deferInitialization = false, int minimumBrightness = 0, int maximumBrightness = 100, string details = "")
     {
         Display = display;
+        Details = details;
+        _minimumBrightness = minimumBrightness; _maximumBrightness = maximumBrightness;
         _brightnessController = brightnessController;
         _brightnessChanged = brightnessChanged;
         _brightnessApplied = brightnessApplied;
@@ -73,6 +77,8 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
 
     public Display Display { get; private set; }
     public string Name { get; private set; }
+    public string Details { get; }
+    public bool HasDetails => Details.Length > 0;
     public bool SupportsBrightness { get; private set; }
     public string BrightnessText => _hasKnownBrightness ? $"{_brightness:0}%" : "—";
     public string StatusMessage
@@ -96,7 +102,7 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
     private void QueueBrightness(double value, bool broadcast)
     {
         if (_disposed || !SupportsBrightness || !double.IsFinite(value)) return;
-        var target = (int)Math.Round(Math.Clamp(value, 0, 100));
+        var target = (int)Math.Round(Math.Clamp(value, _minimumBrightness, _maximumBrightness));
         if (target == _brightness && !HasError) return;
         _editVersion++;
         _brightness = target;
@@ -212,10 +218,11 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
             });
             if (_disposed || editVersion != _editVersion || version != _brightnessController.GetVersion(Display) ||
                 _writeInFlight || _pendingBrightness.HasValue || _brightnessController.IsDisplaySleeping) return;
+            var readSucceeded = current.HasValue;
             current = _brightnessController.GetLastKnownBrightness(Display) ?? current;
             SupportsBrightness = supported;
-            HasError = !current.HasValue;
-            StatusMessage = current.HasValue ? "" : supported
+            HasError = !readSucceeded;
+            StatusMessage = readSucceeded ? "" : supported
                 ? "Brightness cannot be read. You can still adjust this monitor."
                 : "Monitor is unavailable. Controls reconnect automatically when it wakes.";
             if (current.HasValue) { _brightness = current.Value; _hasKnownBrightness = true; }

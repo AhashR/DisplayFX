@@ -2,7 +2,8 @@
 ; Created for DisplayFX Windows Installer
 
 #define MyAppName "DisplayFX"
-#define MyAppVersion "2.1.2"
+#define MyAppVersion "2.2.0-preview.1"
+#define MyAppFileVersion "2.2.0.0"
 #define MyAppPublisher "AhashR"
 #define MyAppURL "https://github.com/AhashR/DisplayFX"
 #define MyAppExeName "DisplayFX.exe"
@@ -15,6 +16,10 @@
 AppId={{67FE0A57-27F9-4945-9A94-CEF4E6A12D4C}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppFileVersion}
+VersionInfoTextVersion={#MyAppVersion}
+VersionInfoProductVersion={#MyAppFileVersion}
+VersionInfoProductTextVersion={#MyAppVersion}
 AppVerName={#MyAppName}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}

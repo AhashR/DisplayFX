@@ -25,8 +25,12 @@ public sealed class ColorUpdateDiagnostics
         var before = await Task.Run(() =>
         {
             var levels = new List<(Display Display, int Level)>();
-            foreach (var display in _cache.GetDisplays())
-                if (_brightness.GetBrightness(display) is int level) levels.Add((display, level));
+            try
+            {
+                foreach (var display in _cache.GetDisplays())
+                    if (ObserveBrightness(display) is int level) levels.Add((display, level));
+            }
+            catch (Exception ex) { ReportObservationFailure(ex); }
             return levels;
         });
         var success = await Task.Run(apply);
@@ -36,7 +40,7 @@ public sealed class ColorUpdateDiagnostics
             await Task.Run(() =>
             {
                 foreach (var (display, level) in before)
-                    if (_brightness.GetBrightness(display) is int current && current != level)
+                    if (ObserveBrightness(display) is int current && current != level)
                     {
                         Warning = "Physical brightness changed during color application. Check monitor dynamic-contrast/HDR settings or other brightness apps; see diagnostic logs.";
                         _logger.Warn("Brightness observation for {0}: before={1}, after={2}, delay={3}ms. No corrective write was sent.", display.DevicePath, level, current, delay);
@@ -44,5 +48,17 @@ public sealed class ColorUpdateDiagnostics
             });
         }
         return success;
+    }
+
+    private int? ObserveBrightness(Display display)
+    {
+        try { return _brightness.GetBrightness(display); }
+        catch (Exception ex) { ReportObservationFailure(ex); return null; }
+    }
+
+    private void ReportObservationFailure(Exception exception)
+    {
+        Warning = "Color diagnostics could not read every monitor. See diagnostic logs for details.";
+        _logger.Warn(exception, "Read-only color diagnostics are unavailable; color application can continue.");
     }
 }

@@ -11,7 +11,7 @@ using DisplayFX.Objects.HandleEvents;
 
 namespace DisplayFX.Interface.ProfileSettings;
 
-public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
+public partial class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
 {
     private readonly IEventAggregator _eventAggregator;
     private readonly Profile _profile;
@@ -31,8 +31,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
     {
         _profile = profile;
         _eventAggregator = eventAggregator;
-        ProfileSetting = new ProfileSetting(profileSetting.Brightness, profileSetting.Contrast,
-            profileSetting.Gamma, profileSetting.DigitalVibrance);
+        ProfileSetting = profileSetting.Copy();
         _hotkeyModifiers = profile.HotkeyModifiers;
         _hotkeyKey = profile.HotkeyKey;
         _linkedExecutablePath = profile.LinkedExecutablePath;
@@ -51,6 +50,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         ProfileSetting.Contrast != _originalSettings.Contrast ||
         ProfileSetting.Gamma != _originalSettings.Gamma ||
         ProfileSetting.DigitalVibrance != _originalSettings.DigitalVibrance ||
+        ProfileSetting.RedGain != _originalSettings.RedGain || ProfileSetting.GreenGain != _originalSettings.GreenGain || ProfileSetting.BlueGain != _originalSettings.BlueGain || ProfileSetting.TemperatureKelvin != _originalSettings.TemperatureKelvin ||
         _hotkeyModifiers != _originalHotkeyModifiers ||
         _hotkeyKey != _originalHotkeyKey ||
         !string.Equals(_linkedExecutablePath, _originalExecutablePath, StringComparison.OrdinalIgnoreCase);
@@ -83,7 +83,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         get
         {
             if (IsRecordingHotkey)
-                return "Press key combination...";
+                return DisplayFX.Global.Controllers.LocalizationController.Instance["Press key combination..."];
 
             return FormatHotkey(_hotkeyModifiers, _hotkeyKey);
         }
@@ -92,7 +92,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
     public static string FormatHotkey(ModifierKeys? modifiers, Key? key)
     {
         if (!key.HasValue || key.Value == Key.None)
-            return "Click to record shortcut";
+            return DisplayFX.Global.Controllers.LocalizationController.Instance["Click to record shortcut"];
 
         var parts = new List<string>();
         if (modifiers.HasValue)
@@ -121,7 +121,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
             parts.Add(keyName);
         }
 
-        return parts.Count > 0 ? string.Join(" + ", parts) : "Click to record shortcut";
+        return parts.Count > 0 ? string.Join(" + ", parts) : DisplayFX.Global.Controllers.LocalizationController.Instance["Click to record shortcut"];
     }
 
     public void SetRecordedHotkey(ModifierKeys? modifiers, Key key)
@@ -154,7 +154,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         }
     }
     public string LinkedApplicationName => string.IsNullOrWhiteSpace(LinkedExecutablePath)
-        ? "Link application" : Path.GetFileNameWithoutExtension(LinkedExecutablePath);
+        ? DisplayFX.Global.Controllers.LocalizationController.Instance["Link application"] : Path.GetFileNameWithoutExtension(LinkedExecutablePath);
     private void BrowseExecutable()
     {
         var dialog = new OpenFileDialog { Filter = "Applications (*.exe)|*.exe", Title = "Link application" };
@@ -166,6 +166,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         set
         {
             if (value.Equals(ProfileSetting.Brightness)) return;
+            TrackColorEdit();
             ProfileSetting.Brightness = value;
             NotifyOfPropertyChange();
             Publish();
@@ -178,6 +179,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         set
         {
             if (value.Equals(ProfileSetting.Contrast)) return;
+            TrackColorEdit();
             ProfileSetting.Contrast = value;
             NotifyOfPropertyChange();
             Publish();
@@ -190,6 +192,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         set
         {
             if (value.Equals(ProfileSetting.Gamma)) return;
+            TrackColorEdit();
             ProfileSetting.Gamma = value;
             NotifyOfPropertyChange();
             Publish();
@@ -202,6 +205,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         set
         {
             if (value.Equals(ProfileSetting.DigitalVibrance)) return;
+            TrackColorEdit();
             ProfileSetting.DigitalVibrance = value;
             NotifyOfPropertyChange();
             Publish();
@@ -219,6 +223,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
             Contrast = _originalSettings.Contrast;
             Gamma = _originalSettings.Gamma;
             DigitalVibrance = _originalSettings.DigitalVibrance;
+            RedGain = _originalSettings.RedGain; GreenGain = _originalSettings.GreenGain; BlueGain = _originalSettings.BlueGain; TemperatureKelvin = _originalSettings.TemperatureKelvin;
             LinkedExecutablePath = _originalExecutablePath;
             _hotkeyModifiers = _originalHotkeyModifiers;
             _hotkeyKey = _originalHotkeyKey;
@@ -248,8 +253,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
 
     private void SetOriginalSettings(ProfileSetting profileSetting)
     {
-        _originalSettings = new ProfileSetting(profileSetting.Brightness, profileSetting.Contrast,
-            profileSetting.Gamma, profileSetting.DigitalVibrance);
+        _originalSettings = profileSetting.Copy();
         _originalHotkeyModifiers = _profile.HotkeyModifiers;
         _originalHotkeyKey = _profile.HotkeyKey;
         _originalExecutablePath = _profile.LinkedExecutablePath;
@@ -260,6 +264,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         if (!_resetting)
         {
             NotifyOfPropertyChange(nameof(IsDirty));
+            NotifyColorInputs();
             _ = _eventAggregator.PublishOnUIThreadAsync(new ProfileSettingsEvent(_profile, IsDirty));
         }
     }
@@ -273,17 +278,19 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
     /// <summary>Commits drafts only while persisting succeeds, leaving unrelated saves isolated from edits.</summary>
     public void Save(System.Action persist)
     {
+        if (HasInputErrors) throw new InvalidOperationException(InputError);
         var savedSettings = _profile.ProfileSetting;
-        var previousSettings = new ProfileSetting(savedSettings.Brightness, savedSettings.Contrast,
-            savedSettings.Gamma, savedSettings.DigitalVibrance);
+        var previousSettings = savedSettings.Copy();
         var previousModifiers = _profile.HotkeyModifiers;
         var previousKey = _profile.HotkeyKey;
         var previousPath = _profile.LinkedExecutablePath;
+        var previousModified = _profile.ModifiedAt;
 
         CopySettings(ProfileSetting, savedSettings);
         _profile.HotkeyModifiers = _hotkeyModifiers;
         _profile.HotkeyKey = _hotkeyKey;
         _profile.LinkedExecutablePath = _linkedExecutablePath;
+        _profile.ModifiedAt = DateTimeOffset.UtcNow;
         try
         {
             if (DisplayFX.Global.Controllers.ProfileTransferController.GetExecutableConflict(_profile) is string conflict)
@@ -296,6 +303,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
             _profile.HotkeyModifiers = previousModifiers;
             _profile.HotkeyKey = previousKey;
             _profile.LinkedExecutablePath = previousPath;
+            _profile.ModifiedAt = previousModified;
             throw;
         }
 
@@ -308,6 +316,7 @@ public class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         target.Contrast = source.Contrast;
         target.Gamma = source.Gamma;
         target.DigitalVibrance = source.DigitalVibrance;
+        target.RedGain = source.RedGain; target.GreenGain = source.GreenGain; target.BlueGain = source.BlueGain; target.TemperatureKelvin = source.TemperatureKelvin;
     }
 }
 

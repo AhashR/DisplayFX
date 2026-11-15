@@ -204,6 +204,7 @@ public class SettingsViewModel : Screen
 
     public void SaveBrightnessAutomation()
     {
+        _brightnessDraft.Features = _computer.Features;
         _brightnessDraft.BrightnessSchedules = BrightnessSchedules.ToList();
         var error = ValidateBrightnessSettings(_brightnessDraft);
         if (error != null) { SettingsStatus = error; return; }
@@ -251,10 +252,12 @@ public class SettingsViewModel : Screen
         if (computer.BrightnessSchedules == null || computer.BrightnessSchedules.Count > 100 ||
             computer.BrightnessSchedules.Any(schedule => schedule == null || !schedule.IsValid))
             return "Each daily time needs HH:mm (00:00 to 23:59) and brightness from 0 to 100%.";
-        if (computer.BrightnessSchedules.GroupBy(schedule => schedule.Time).Any(group => group.Count() > 1))
+        if (BrightnessAutomationController.HasScheduleConflicts(computer.BrightnessSchedules))
             return "Daily brightness times must be unique.";
         if (computer.IsBrightnessScheduleEnabled && computer.BrightnessSchedules.Count == 0)
             return "Add at least one daily time before enabling the schedule.";
+        if (computer.IsBrightnessScheduleEnabled && computer.BrightnessSchedules.Any(schedule => schedule.SolarEvent != "Fixed") && !computer.Features.SolarLatitude.HasValue)
+            return "Save a manual latitude and longitude before enabling solar brightness times.";
         return computer.IsBrightnessShortcutsEnabled ? BrightnessAutomationController.GetShortcutValidationError(computer, true) ??
             BrightnessAutomationController.GetShortcutValidationError(computer, false) : null;
     }
@@ -269,7 +272,7 @@ public class SettingsViewModel : Screen
         target.BrightnessDecreaseKey = source.BrightnessDecreaseKey;
         target.IsBrightnessScheduleEnabled = source.IsBrightnessScheduleEnabled;
         target.BrightnessSchedules = (source.BrightnessSchedules ?? new()).Select(schedule =>
-            new BrightnessSchedule { Time = schedule.Time, Brightness = schedule.Brightness }).ToList();
+            schedule.Copy()).ToList();
     }
 
     private void SaveOption(Func<bool> get, Action<bool> set, bool value, string property, bool startup = false)

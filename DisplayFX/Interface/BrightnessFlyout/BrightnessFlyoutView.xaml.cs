@@ -18,6 +18,7 @@ public partial class BrightnessFlyoutView : Window
     public System.Drawing.Point AnchorPoint { get; set; } = System.Windows.Forms.Cursor.Position;
     private bool _isClosing;
     private bool _canClose;
+    private bool _positioning;
     private readonly TaskCompletionSource _closed = new();
     public Task CloseCompletion => _closed.Task;
 
@@ -27,6 +28,7 @@ public partial class BrightnessFlyoutView : Window
         ContentRendered += OnContentRendered;
         Closing += OnClosing;
         Deactivated += OnDeactivated;
+        SizeChanged += (_, _) => { if (IsLoaded) PositionNearTaskbar(); };
     }
 
     private void OnContentRendered(object? sender, EventArgs e)
@@ -62,7 +64,7 @@ public partial class BrightnessFlyoutView : Window
     {
         // Deactivation also fires while the window is already closing; guard
         // against the re-entrant Close() that would otherwise throw.
-        if (!_isClosing)
+        if (!_isClosing && DataContext is not BrightnessFlyoutViewModel { IsPinned: true })
             Close();
     }
 
@@ -76,16 +78,24 @@ public partial class BrightnessFlyoutView : Window
 
     private void PositionNearTaskbar()
     {
+        if (_positioning) return;
+        _positioning = true;
+        try
+        {
         var area = System.Windows.Forms.Screen.FromPoint(AnchorPoint).WorkingArea;
         var handle = new WindowInteropHelper(this).Handle;
         SetWindowPos(handle, IntPtr.Zero, area.Left + 12, area.Top + 12, 0, 0, 0x0015);
         var scale = GetDpiForWindow(handle) / 96d;
         if (scale <= 0) scale = 1;
+        MaxHeight = System.Math.Max(100, area.Height / scale - 24);
+        Width = System.Math.Min(320, System.Math.Max(180, area.Width / scale - 24));
         var width = (int)System.Math.Ceiling(ActualWidth * scale);
         var height = (int)System.Math.Ceiling(ActualHeight * scale);
         var x = System.Math.Clamp(AnchorPoint.X - width + 20, area.Left, System.Math.Max(area.Left, area.Right - width));
         var y = AnchorPoint.Y > area.Top + area.Height / 2 ? System.Math.Max(area.Top, area.Bottom - height - 12) : area.Top + 12;
         SetWindowPos(handle, IntPtr.Zero, x, y, 0, 0, 0x0015);
+        }
+        finally { _positioning = false; }
     }
 
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr window);

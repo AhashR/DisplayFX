@@ -5,6 +5,8 @@ namespace DisplayFX.Objects.Entities;
 
 public class Computer
 {
+    public int DataFormatVersion { get; set; } = 2;
+    public FeatureSettings Features { get; set; } = new();
     public bool IsStartWithWindows { get; set; }
     public bool IsApplySettingsOnStart { get; set; }
     public bool IsRememberBrightnessOnStart { get; set; }

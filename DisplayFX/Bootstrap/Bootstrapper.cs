@@ -14,7 +14,6 @@ using Caliburn.Micro;
 using FluentResults;
 using Microsoft.Extensions.DependencyInjection;
 using NLog;
-using NvAPIWrapper;
 using DisplayFX.Global;
 using DisplayFX.Global.Controllers;
 using DisplayFX.Global.Extensions;
@@ -86,7 +85,7 @@ public class Bootstrapper : BootstrapperBase
 
         services.AddSingleton<DisplayCache>();
         services.AddSingleton<RegistryController>();
-        services.AddSingleton<MonitorBrightnessController>();
+        services.AddSingleton<MonitorBrightnessController>(provider => new(provider.GetRequiredService<ILogger>(), new WmiInternalPanelBrightness()));
         services.AddSingleton<ProcessController>();
         services.AddSingleton<AppProfileSwitchingController>();
         services.AddSingleton<BrightnessPersistenceController>();
@@ -143,7 +142,6 @@ public class Bootstrapper : BootstrapperBase
         {
             if ((await CheckIfApplicationIsRunning(e.Args)).IsFailed)
                 return;
-            TryStartNvidia();
             if (TryLoad().IsFailed)
                 return;
 
@@ -325,20 +323,6 @@ public class Bootstrapper : BootstrapperBase
 
         Application.Current.Shutdown();
         return Result.Fail("Another instance is already running.");
-    }
-
-    private Result TryStartNvidia()
-    {
-        try
-        {
-            NVIDIA.Initialize();
-            _fileLogger.Info("Starting Nvidia.");
-        }
-        catch (Exception e)
-        {
-            _fileLogger.Warn(e, "Nvidia device initialization failed or non-Nvidia GPU detected.");
-        }
-        return Result.Ok();
     }
 
     private Result Log(Exception e, string message)

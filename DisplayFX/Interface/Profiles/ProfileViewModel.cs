@@ -31,7 +31,14 @@ public class ProfileViewModel : Screen
     public Action<Guid>? ProfileDuplicateRequested { get; set; }
     public Action<Guid>? ProfileRenameRequested { get; set; }
     public Action<Guid>? ProfileExportRequested { get; set; }
+    public Action<Guid>? ProfileFavoriteRequested { get; set; }
+    public Action<Guid, int>? ProfileMoveRequested { get; set; }
     public string Name => Profile.Name;
+    public string Icon => Profile.Icon;
+    public string MarkerColor => Profile.MarkerColor;
+    public string FavoriteMark => Profile.IsFavorite ? "★" : "";
+    public string AccessibleDescription => DisplayFX.Global.Controllers.LocalizationController.Instance[IsActive ? "Active profile" : "Inactive profile"] + ". " +
+        (Profile.IsFavorite ? DisplayFX.Global.Controllers.LocalizationController.Instance["Favorite"] + ". " : "") + Profile.Notes;
     public Guid Guid { get; set; }
 
     public ProfileSettingViewModel? ProfileSettings
@@ -56,6 +63,7 @@ public class ProfileViewModel : Screen
             if (value == Profile.IsActive) return;
             Profile.IsActive = value;
             NotifyOfPropertyChange();
+            NotifyOfPropertyChange(nameof(AccessibleDescription));
         }
     }
 
@@ -95,6 +103,9 @@ public class ProfileViewModel : Screen
     private void CreateContextMenu()
     {
         ContextMenu = new ContextMenu();
+        AddMenuItem("Favorite / unfavorite", () => ProfileFavoriteRequested?.Invoke(Guid));
+        AddMenuItem("Move up", () => ProfileMoveRequested?.Invoke(Guid, -1));
+        AddMenuItem("Move down", () => ProfileMoveRequested?.Invoke(Guid, 1));
         AddMenuItem("Duplicate", () => ProfileDuplicateRequested?.Invoke(Guid));
         AddMenuItem("Export profile...", () => ProfileExportRequested?.Invoke(Guid));
         if (Profile.IsDefault)
@@ -104,7 +115,7 @@ public class ProfileViewModel : Screen
         ContextMenu.Items.Add(new Separator());
         var menuItem1 = new MenuItem
         {
-            Header = "Remove"
+            Header = DisplayFX.Global.Controllers.LocalizationController.Instance["Remove"]
         };
         menuItem1.Click += OnRemoveClicked;
         ContextMenu.Items.Add(menuItem1);
@@ -112,12 +123,17 @@ public class ProfileViewModel : Screen
 
     private void AddMenuItem(string header, System.Action action)
     {
-        var item = new MenuItem { Header = header };
+        var item = new MenuItem { Header = DisplayFX.Global.Controllers.LocalizationController.Instance[header] };
         item.Click += (_, _) => action();
         ContextMenu.Items.Add(item);
     }
 
     public void RefreshName() => NotifyOfPropertyChange(nameof(Name));
+    public void RefreshMetadata()
+    {
+        CreateContextMenu(); NotifyOfPropertyChange(nameof(ContextMenu));
+        foreach (var property in new[] { nameof(Name), nameof(Icon), nameof(MarkerColor), nameof(FavoriteMark), nameof(AccessibleDescription) }) NotifyOfPropertyChange(property);
+    }
 
     private void OnRemoveClicked(object sender, RoutedEventArgs e)
     {

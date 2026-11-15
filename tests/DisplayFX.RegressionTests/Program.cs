@@ -14,6 +14,8 @@ internal static class Program
         {
             if (args.Length == 1 && args[0] == "--diagnose-brightness")
                 return BrightnessDiagnostics.Run();
+            if (args.Length == 1 && args[0] == "--diagnose-hardware")
+                return HardwareCapabilityDiagnostics.Run();
             var count = StorageChecks() + TrayChecks() + ColorTransactionChecks();
             count += BrightnessRegressionChecks.Run();
             count += ProfileRegressionChecks.Run();
@@ -25,6 +27,8 @@ internal static class Program
             count += BrightnessFeatureRegressionChecks.Run();
             count += BugFixRegressionChecks.Run();
             count += AuditFixRegressionChecks.Run();
+            count += FullAppAuditRegressionChecks.Run();
+            count += FeatureExpansionRegressionChecks.Run();
             count += UiSmokeChecks.Run(args.Length == 2 && args[0] == "--render-ui" ? args[1] : null);
             Console.WriteLine($"Passed {count} hardware-independent regression checks.");
             return 0;

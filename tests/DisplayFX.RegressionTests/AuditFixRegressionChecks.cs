@@ -137,6 +137,23 @@ internal static class AuditFixRegressionChecks
             count += NativeLockChecks();
             count += IdentityChecks();
             count += ProfileApplicationChecks(directory);
+            var discovery = (FixtureNvidiaShell)RuntimeHelpers.GetUninitializedObject(typeof(FixtureNvidiaShell));
+            typeof(ShellViewModel).GetField("_logger", Instance)!.SetValue(discovery, Logger);
+            var loadDisplays = typeof(ShellViewModel).GetMethod("LoadNvidiaDisplays", Instance)!;
+            var displayList = typeof(ShellViewModel).GetField("_nvidiaDisplays", Instance)!;
+            displayList.SetValue(discovery, new List<NvAPIWrapper.Display.Display> { null! });
+            discovery.Fail = true;
+            loadDisplays.Invoke(discovery, null);
+            Check(((List<NvAPIWrapper.Display.Display>)displayList.GetValue(discovery)!).Count == 0,
+                "Failed NVIDIA discovery must discard stale driver handles.");
+            discovery.Fail = false;
+            loadDisplays.Invoke(discovery, null);
+            Check(discovery.Attempts == 2 && ReferenceEquals(displayList.GetValue(discovery), discovery.Displays),
+                "NVIDIA discovery must recover on refresh after startup failure.");
+            var unavailableColors = new DisplayController(Logger, null!);
+            Check(!unavailableColors.UpdateColorSettings(null!, new(.5, .5, 1, 1), null) &&
+                  unavailableColors.LastError!.Contains("Digital Vibrance is unavailable"),
+                "Missing NVIDIA controls must report unapplied vibrance before changing gamma.");
             var logging = NLog.LogManager.Configuration;
             try
             {
@@ -214,6 +231,7 @@ internal static class AuditFixRegressionChecks
         Set("_dataController", new DataController(Path.Combine(directory,"profile-apply"), directory + ".absent"));
         Set("_colorDiagnostics", new ColorUpdateDiagnostics(new FixtureCache(), new FixtureBrightness(), Logger));
         var method = typeof(ShellViewModel).GetMethod("ApplyProfile", Instance)!;
+        typeof(ShellViewModel).GetProperty("OperationStatus")!.SetValue(shell, "Old driver failure");
         Pump(async () =>
         {
             var work = (Task<bool>)method.Invoke(shell, new object?[] {profile, false, null})!;
@@ -226,7 +244,8 @@ internal static class AuditFixRegressionChecks
             finally { colors.Release.Set(); }
             if (!await work) throw new InvalidOperationException("Successful background GPU application must update the profile.");
         });
-        return 2;
+        if (shell.HasOperationStatus) throw new InvalidOperationException("Successful color application must clear old warnings.");
+        return 3;
     }
 
     private static M MakeMonitor(string path)
@@ -267,5 +286,20 @@ internal static class AuditFixRegressionChecks
         public FixtureColors():base(Logger,null!){}
         public override bool UpdateColorSettings(Display display,ProfileSetting settings,NvAPIWrapper.Display.Display? nvidia)
         { Entered.Set(); if(!Release.Wait(5000))throw new TimeoutException();return true; }
+    }
+    private sealed class FixtureNvidiaShell : ShellViewModel
+    {
+        // Instances are created without running startup or touching attached hardware.
+        private FixtureNvidiaShell() : base(null!, null!, null!, null!, null!, null!, null!, null!,
+            null!, null!, null!, null!, null!, null!, null!, null!, null!) { }
+        public bool Fail;
+        public int Attempts;
+        public List<NvAPIWrapper.Display.Display>? Displays;
+        protected override List<NvAPIWrapper.Display.Display> EnumerateNvidiaDisplays()
+        {
+            Attempts++;
+            if (Fail) throw new InvalidOperationException("Driver temporarily unavailable");
+            return Displays = new();
+        }
     }
 }

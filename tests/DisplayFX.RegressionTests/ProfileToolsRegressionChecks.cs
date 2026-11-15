@@ -161,13 +161,13 @@ internal static class ProfileToolsRegressionChecks
             Reject(() => ProfileTransferController.ReadSettings(settingsPath), "Trailing JSON documents must be rejected.");
             Check(Directory.GetFiles(directory, "*.tmp").Length == 0, "Exports must clean temporary files after replacing backups.");
             var full = CreateMonitor("full", "Full", 10);
-            for (var index = 1; index < 5; index++)
+            for (var index = 1; index < ProfileTransferController.MaximumProfilesPerMonitor; index++)
                 full.Profiles.Add(new Profile(full, "Profile " + index, new ProfileSetting(0.5, 0.5, 1, 0.5), false));
             var incoming = CreateMonitor("full", "Full", 30);
             incoming.Profiles.Add(new Profile(incoming, "Incoming", new ProfileSetting(0.7, 0.6, 1, 0.5), false));
             Reject(() => ProfileTransferController.MergeSettings(new Computer { Monitors = new() { full } },
-                    new Computer { Monitors = new() { incoming } }), "Imports cannot exceed the five-profile app limit.");
-            Check(full.Profiles.Count == 5 && incoming.Profiles.Count == 2,
+                    new Computer { Monitors = new() { incoming } }), "Imports cannot exceed the configured profile limit.");
+            Check(full.Profiles.Count == ProfileTransferController.MaximumProfilesPerMonitor && incoming.Profiles.Count == 2,
                 "A capacity failure must leave both original configurations untouched.");
         }
         finally

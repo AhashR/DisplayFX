@@ -48,7 +48,8 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
                     brightnessController,
                     OnMonitorBrightnessChanged,
                     brightnessPersistenceController.Remember,
-                    brightnessPersistenceController.GetMonitorName(display), brightnessPersistenceController.GetRememberedBrightness(display), deferInitialization)));
+                    brightnessPersistenceController.GetMonitorName(display), brightnessPersistenceController.GetRememberedBrightness(display), deferInitialization,
+                    brightnessPersistenceController.GetMonitor(display)?.MinimumBrightness ?? 0, brightnessPersistenceController.GetMonitor(display)?.MaximumBrightness ?? 100, brightnessPersistenceController.GetDisplayDetails(display))));
         if (_topology != null) _topology.TopologyChanged += OnTopologyChanged;
         brightnessController.DisplayPowerChanged += OnDisplayPowerChanged;
         if (deferInitialization) Initialization = RefreshDisplaysAsync();
@@ -57,6 +58,7 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
     public Task Initialization { get; } = Task.CompletedTask;
 
     public ObservableCollection<BrightnessMonitorViewModel> Monitors { get; }
+    public bool IsPinned => _persistence?.PinPopup == true;
 
     /// <summary>
     ///     Invoked when the user clicks the settings gear. The view wires this to
@@ -140,7 +142,12 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
     private IReadOnlyList<Display> GetConnectedDisplays()
     {
         _displayCache.Refresh();
-        return _displayCache.GetDisplays();
+        return _persistence.PopupOrder switch
+        {
+            "Name" => _displayCache.GetDisplays().OrderBy(display => _persistence.GetMonitorName(display), StringComparer.CurrentCultureIgnoreCase).ToList(),
+            "Favorites" => _displayCache.GetDisplays().OrderByDescending(display => _persistence.GetMonitor(display)?.IsFavorite == true).ToList(),
+            _ => _displayCache.GetDisplays()
+        };
     }
 
     public async Task RefreshDisplaysAsync()
@@ -152,6 +159,7 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
             // Enumerating after wake replaces stale logical monitor objects as well as their DDC ranges.
             var displays = await Task.Run(GetConnectedDisplays);
             if (_disposed) return;
+            LinkStatus = null;
             _brightnessController.InvalidateTransports();
             foreach (var monitor in Monitors.ToList())
             {
@@ -168,7 +176,8 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
             {
                 if (_disposed) return;
                 Monitors.Add(new BrightnessMonitorViewModel(display, _brightnessController, OnMonitorBrightnessChanged,
-                    _persistence.Remember, _persistence.GetMonitorName(display), _persistence.GetRememberedBrightness(display), true));
+                    _persistence.Remember, _persistence.GetMonitorName(display), _persistence.GetRememberedBrightness(display), true,
+                    _persistence.GetMonitor(display)?.MinimumBrightness ?? 0, _persistence.GetMonitor(display)?.MaximumBrightness ?? 100, _persistence.GetDisplayDetails(display)));
             }
         }
         catch (Exception) { LinkStatus = "Display controls reconnect automatically after wake."; }
@@ -183,7 +192,12 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
         foreach (var monitor in Monitors)
         {
             if (!ReferenceEquals(monitor, source) && monitor.SupportsBrightness)
-                monitor.ApplyBrightness(value);
+            {
+                var origin = _persistence.GetMonitor(source.Display);
+                var target = _persistence.GetMonitor(monitor.Display);
+                if (!string.Equals(origin?.BrightnessGroup ?? "", target?.BrightnessGroup ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+                monitor.ApplyBrightness(value - (origin?.BrightnessOffset ?? 0) + (target?.BrightnessOffset ?? 0));
+            }
         }
     }
 

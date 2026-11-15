@@ -24,7 +24,31 @@ namespace DisplayFX.Interface.Shell;
 
 public partial class ShellView
 {
+    private async void Compare_Down(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    { if (DataContext is ShellViewModel model) { var button = (System.Windows.Controls.Button)sender; button.CaptureMouse(); await model.CompareOriginal(); if (!button.IsMouseCaptured || Mouse.LeftButton != MouseButtonState.Pressed) await model.CancelPreview(); } }
+    private async void Compare_Up(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    { ((System.Windows.Controls.Button)sender).ReleaseMouseCapture(); if (DataContext is ShellViewModel model) await model.CancelPreview(); }
+    private async void Compare_LostCapture(object sender, System.Windows.Input.MouseEventArgs e)
+    { if (DataContext is ShellViewModel model) await model.CancelPreview(); }
+    private async void Compare_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    { if (e.Key == Key.Space && !e.IsRepeat && DataContext is ShellViewModel model) { e.Handled = true; await model.CompareOriginal(); if (!Keyboard.IsKeyDown(Key.Space)) await model.CancelPreview(); } }
+    private async void Compare_KeyUp(object sender, System.Windows.Input.KeyEventArgs e)
+    { if (e.Key == Key.Space && DataContext is ShellViewModel model) { e.Handled = true; await model.CancelPreview(); } }
+    protected override async void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        if (DataContext is not ShellViewModel model || model.SelectedProfile?.ProfileSettings?.IsRecordingHotkey == true || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt) || !Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
+        if (e.Key == Key.S) { e.Handled = true; model.Update(); }
+        else if (e.Key == Key.Enter && model.CanApply) { e.Handled = true; await model.Apply(); }
+        else if (e.OriginalSource is not System.Windows.Controls.Primitives.TextBoxBase && e.Key == Key.Z)
+        {
+            e.Handled = true;
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) model.SelectedProfile?.ProfileSettings?.RedoColor();
+            else model.SelectedProfile?.ProfileSettings?.UndoColor();
+        }
+    }
     private NotifyIcon? _notifyIcon;
+    private ToolStripMenuItem? _trayProfilesMenu;
     private BrightnessFlyoutView? _brightnessFlyout;
     private readonly HashSet<BrightnessFlyoutView> _brightnessWindows = new();
     private bool _flyoutWasOpenOnMouseDown;
@@ -111,6 +135,7 @@ public partial class ShellView
         CreateSystemTrayIcon();
 
         GlobalEvents.UpdateToolTip += OnUpdateToolTip;
+        GlobalEvents.NotificationRequested += OnNotification;
         DataContextChanged += (_, _) => BuildToolTip();
     }
 
@@ -131,8 +156,15 @@ public partial class ShellView
         }
     }
 
-    protected override void OnClosing(CancelEventArgs e)
+    protected override async void OnClosing(CancelEventArgs e)
     {
+        if (!_isExiting && DataContext is ShellViewModel { HasPreview: true } previewModel)
+        {
+            e.Cancel = true;
+            await previewModel.CancelPreview();
+            _ = Dispatcher.BeginInvoke(new System.Action(Close));
+            return;
+        }
         if (!_isExiting && _notifyIcon?.Visible == true &&
             DataContext is ShellViewModel viewModel && viewModel.Computer.IsMinimizeToTray)
         {
@@ -160,6 +192,10 @@ public partial class ShellView
     {
         BuildToolTip();
     }
+    private void OnNotification(string message)
+    {
+        if (_notifyIcon?.Visible == true) _notifyIcon.ShowBalloonTip(2000, "DisplayFX", message, ToolTipIcon.Info);
+    }
 
     private void CreateSystemTrayIcon()
     {
@@ -186,6 +222,9 @@ public partial class ShellView
             _notifyIcon.MouseClick += OnNotifyIconMouseClick;
 
             _notifyIcon.ContextMenuStrip = new ContextMenuStrip();
+            _trayProfilesMenu = new ToolStripMenuItem("Profiles");
+            _notifyIcon.ContextMenuStrip.Items.Add(_trayProfilesMenu);
+            _notifyIcon.ContextMenuStrip.Opening += (_, _) => RebuildTrayProfiles();
             _notifyIcon.ContextMenuStrip.Items.Add("Adjust brightness", null, BrightnessEvent);
             _notifyIcon.ContextMenuStrip.Items.Add("Show menu", null, OpenEvent);
             _notifyIcon.ContextMenuStrip.Items.Add("Identify displays", null, (_, _) =>
@@ -204,6 +243,28 @@ public partial class ShellView
             _trayIcon?.Dispose();
             _trayIcon = null;
             System.Diagnostics.Debug.WriteLine($"Failed to load tray icon: {ex.Message}");
+        }
+    }
+    private void RebuildTrayProfiles()
+    {
+        if (_trayProfilesMenu == null || DataContext is not ShellViewModel shell) return;
+        _trayProfilesMenu.Text = LocalizationController.Instance["Profiles"];
+        foreach (ToolStripItem root in _notifyIcon!.ContextMenuStrip!.Items)
+            if (!ReferenceEquals(root, _trayProfilesMenu) && root is not ToolStripSeparator)
+            { root.Tag ??= root.Text; root.Text = LocalizationController.Instance[root.Tag as string ?? root.Text ?? ""]; }
+        foreach (ToolStripItem item in _trayProfilesMenu.DropDownItems.Cast<ToolStripItem>().ToArray()) item.Dispose();
+        _trayProfilesMenu.DropDownItems.Clear();
+        foreach (var monitor in shell.VisibleMonitors)
+        {
+            var displayMenu = new ToolStripMenuItem(monitor.Name);
+            foreach (var profile in monitor.Profiles.OrderByDescending(profile => profile.Profile.IsFavorite))
+            {
+                var id = profile.Profile.Id;
+                var item = new ToolStripMenuItem((profile.Profile.IsFavorite ? "★ " : "") + profile.Name) { Checked = profile.IsActive };
+                item.Click += async (_, _) => await shell.ApplyProfileById(id);
+                displayMenu.DropDownItems.Add(item);
+            }
+            _trayProfilesMenu.DropDownItems.Add(displayMenu);
         }
     }
 
@@ -235,6 +296,7 @@ public partial class ShellView
         var flyouts = _brightnessWindows.ToArray();
         foreach (var flyout in flyouts) flyout.Close();
         await Task.WhenAll(flyouts.Select(flyout => flyout.CloseCompletion));
+        if (DataContext is ShellViewModel model) await model.CancelPreview();
         Application.Current.Shutdown();
     }
 
@@ -374,6 +436,7 @@ public partial class ShellView
     protected override void OnClosed(EventArgs e)
     {
         GlobalEvents.UpdateToolTip -= OnUpdateToolTip;
+        GlobalEvents.NotificationRequested -= OnNotification;
         _powerNotifications?.Dispose();
         CloseBrightnessFlyout();
         _notifyIcon?.ContextMenuStrip?.Dispose();

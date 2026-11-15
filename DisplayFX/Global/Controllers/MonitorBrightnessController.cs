@@ -12,7 +12,7 @@ namespace DisplayFX.Global.Controllers;
 ///     using the Windows Monitor Configuration API (dxva2.dll) - the same
 ///     mechanism used by Twinkle Tray and Monitorian.
 /// </summary>
-public class MonitorBrightnessController
+public partial class MonitorBrightnessController
 {
     /// <summary>VCP code for image luminance (backlight brightness).</summary>
     private const byte BrightnessVcpCode = 0x10;
@@ -24,6 +24,7 @@ public class MonitorBrightnessController
     private const uint MonitorCapabilitiesBrightness = 0x00000002;
 
     private readonly ILogger _logger;
+    private readonly IInternalPanelBrightness? _internalPanels;
     private readonly ConcurrentDictionary<string, BrightnessStatus> _statuses = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _lastKnown = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, long> _versions = new(StringComparer.OrdinalIgnoreCase);
@@ -40,7 +41,13 @@ public class MonitorBrightnessController
     }
     public void InvalidateTransports()
     {
+        _internalPanels?.Invalidate();
         foreach (var channel in _channels.Values) channel.Invalidated = true;
+    }
+    public void InvalidateDisplayTransport(Display display)
+    {
+        if (_channels.TryGetValue(display.DevicePath, out var channel)) channel.Invalidated = true;
+        _internalPanels?.Invalidate();
     }
 
     private sealed class Channel
@@ -83,9 +90,10 @@ public class MonitorBrightnessController
         }
     }
 
-    public MonitorBrightnessController(ILogger logger)
+    public MonitorBrightnessController(ILogger logger, IInternalPanelBrightness? internalPanels = null)
     {
         _logger = logger;
+        _internalPanels = internalPanels;
     }
 
     /// <summary>Relative changes share the same monitor lock as absolute slider writes.</summary>
@@ -96,6 +104,17 @@ public class MonitorBrightnessController
         {
             if (IsDisplaySleeping || GetBrightness(display) is not int current) return null;
             var target = (int)Math.Clamp(current + delta, 0L, 100L);
+            return SetBrightness(display, target) ? target : null;
+        }
+    }
+    public virtual int? AdjustBrightnessWithinLimits(Display display, long delta, int minimum, int maximum)
+    {
+        if (minimum == 0 && maximum == 100) return AdjustBrightness(display, delta);
+        var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());
+        lock (channel)
+        {
+            if (IsDisplaySleeping || GetBrightness(display) is not int current) return null;
+            var target = (int)Math.Clamp(current + delta, minimum, maximum);
             return SetBrightness(display, target) ? target : null;
         }
     }
@@ -136,6 +155,7 @@ public class MonitorBrightnessController
 
         try
         {
+            if (_internalPanels?.TryRead(display, out var internalLevel) == true) return internalLevel;
             var monitorHandle = GetMonitorHandle(display);
             if (monitorHandle == IntPtr.Zero)
                 return null;
@@ -187,6 +207,7 @@ public class MonitorBrightnessController
 
         try
         {
+            if (_internalPanels?.Supports(display) == true) return true;
             var monitorHandle = GetMonitorHandle(display);
             if (monitorHandle == IntPtr.Zero)
                 return false;
@@ -262,6 +283,7 @@ public class MonitorBrightnessController
 
         try
         {
+            if (_internalPanels?.Supports(display) == true) return _internalPanels.Set(display, Math.Clamp(brightness, 0, 100));
             var monitorHandle = GetMonitorHandle(display);
             if (monitorHandle == IntPtr.Zero)
             {

@@ -5,6 +5,12 @@ namespace DisplayFX.Interface.ProfileSettings;
 
 public partial class ProfileSettingView : UserControl
 {
+    private void ResetBrightness_Click(object sender, System.Windows.RoutedEventArgs e) => (DataContext as ProfileSettingViewModel)?.ResetBrightness();
+    private void ResetContrast_Click(object sender, System.Windows.RoutedEventArgs e) => (DataContext as ProfileSettingViewModel)?.ResetContrast();
+    private void ResetVibrance_Click(object sender, System.Windows.RoutedEventArgs e) => (DataContext as ProfileSettingViewModel)?.ResetVibrance();
+    private void ResetGamma_Click(object sender, System.Windows.RoutedEventArgs e) => (DataContext as ProfileSettingViewModel)?.ResetGamma();
+    private void UndoColor_Click(object sender, System.Windows.RoutedEventArgs e) => (DataContext as ProfileSettingViewModel)?.UndoColor();
+    private void RedoColor_Click(object sender, System.Windows.RoutedEventArgs e) => (DataContext as ProfileSettingViewModel)?.RedoColor();
     public ProfileSettingView()
     {
         InitializeComponent();

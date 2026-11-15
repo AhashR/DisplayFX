@@ -6,8 +6,34 @@ using System.Text;
 
 namespace DisplayFX.Global.Controllers;
 
-public sealed class ProcessController
+public sealed class ProcessController : IDisposable
 {
+    private IntPtr _foregroundHook;
+    private WinEventCallback? _foregroundCallback;
+    public bool StartForegroundWatch(Action changed)
+    {
+        if (_foregroundHook != IntPtr.Zero) return true;
+        _foregroundCallback = (_, _, _, _, _, _, _) => changed();
+        _foregroundHook = SetWinEventHook(3, 3, IntPtr.Zero, _foregroundCallback, 0, 0, 0x0002);
+        return _foregroundHook != IntPtr.Zero;
+    }
+    public void Dispose()
+    {
+        if (_foregroundHook != IntPtr.Zero) UnhookWinEvent(_foregroundHook);
+        _foregroundHook = IntPtr.Zero; _foregroundCallback = null;
+    }
+    private delegate void WinEventCallback(IntPtr hook, uint eventId, IntPtr window, int objectId, int childId, uint threadId, uint time);
+    [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint minimum, uint maximum, IntPtr module, WinEventCallback callback, uint processId, uint threadId, uint flags);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool UnhookWinEvent(IntPtr hook);
+    public bool IsForegroundFullscreen()
+    {
+        var window = GetForegroundWindow();
+        if (window == IntPtr.Zero || !GetWindowRect(window, out var bounds)) return false;
+        var screen = System.Windows.Forms.Screen.FromHandle(window).Bounds;
+        return bounds.Left <= screen.Left && bounds.Top <= screen.Top && bounds.Right >= screen.Right && bounds.Bottom >= screen.Bottom;
+    }
+    [StructLayout(LayoutKind.Sequential)] private struct NativeRectangle { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetWindowRect(IntPtr window, out NativeRectangle rectangle);
     public string? GetForegroundExecutablePath()
     {
         var window = GetForegroundWindow();

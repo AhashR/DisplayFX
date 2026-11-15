@@ -45,9 +45,9 @@ public class DisplayWindowManager
         string initialName = "", IEnumerable<string>? existingNames = null)
     {
         var viewModel = _profileNameViewModelFactory.Create();
-        viewModel.Configure(title, initialName, existingNames);
+        viewModel.Configure(Controllers.LocalizationController.Instance[title], initialName, existingNames);
         dynamic settings = new ExpandoObject();
-        settings.Title = title;
+        settings.Title = Controllers.LocalizationController.Instance[title];
         settings.SizeToContent = SizeToContent.WidthAndHeight;
         settings.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         settings.ResizeMode = ResizeMode.NoResize;
