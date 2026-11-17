@@ -1,0 +1,75 @@
+name: Publish Windows preview
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: displayfx-windows-preview
+  cancel-in-progress: false
+jobs:
+  preview:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore DisplayFX.sln
+      - run: dotnet build DisplayFX.sln -c Release --no-restore
+      - run: dotnet run --project tests/DisplayFX.RegressionTests -c Release --no-build
+      - name: Install verified installer compiler
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $installer
+          $signature = Get-AuthenticodeSignature $installer
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Pyrsys B.V.*') { throw 'Installer compiler signature verification failed.' }
+          $directory = Join-Path $env:RUNNER_TEMP 'InnoSetup'
+          $process = Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/NOICONS',"/DIR=$directory") -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Compiler installation failed.' }
+          "INNO_COMPILER=$directory\ISCC.exe" >> $env:GITHUB_ENV
+      - name: Build installer
+        shell: pwsh
+        run: ./build_installer.ps1 -InnoCompiler $env:INNO_COMPILER
+      - name: Publish verified preview assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          [xml] $project = Get-Content 'DisplayFX/DisplayFX.csproj' -Raw
+          $version = [string] $project.Project.PropertyGroup.Version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid app version.' }
+          $tag = "V$version-preview.1"
+          $installer = 'artifacts/DisplayFX_Setup.exe'
+          $checksum = "$installer.sha256"
+          $assetHashes = @{}
+          foreach ($path in @($installer, $checksum)) {
+            $assetHashes[(Split-Path $path -Leaf)] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          if ((Get-Content -LiteralPath $checksum -Raw).TrimEnd() -cne ($assetHashes['DisplayFX_Setup.exe'] + '  DisplayFX_Setup.exe')) {
+            throw 'The installer SHA-256 file does not match the installer.'
+          }
+          $notes = (Get-Content -LiteralPath "docs/releases/$version.md" -Raw).TrimEnd()
+          $notes += "`n`nThis is an unsigned Windows preview. It has passed automated regression checks but has not completed the full hardware qualification matrix. The latest stable release is unchanged.`n"
+          $notesPath = Join-Path $env:RUNNER_TEMP 'preview-release.md'
+          Set-Content -LiteralPath $notesPath -Value $notes -Encoding utf8NoBOM
+          gh release create $tag $installer $checksum --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --prerelease --latest=false --title "DisplayFX $version Preview" --notes-file $notesPath
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
+          $target = gh api "repos/$env:GITHUB_REPOSITORY/commits/$tag" --jq '.sha'
+          if ($release.draft -or -not $release.prerelease -or $target -ne $env:GITHUB_SHA -or $release.assets.Count -ne $assetHashes.Count) {
+            throw 'GitHub did not confirm the expected preview release.'
+          }
+          foreach ($asset in $release.assets) {
+            if ($asset.state -ne 'uploaded' -or -not $assetHashes.ContainsKey($asset.name) -or $asset.digest -ne ('sha256:' + $assetHashes[$asset.name])) {
+              throw "GitHub did not confirm the expected checksum for $($asset.name)."
+            }
+          }
+          Write-Output "Published and verified $($release.html_url)"
