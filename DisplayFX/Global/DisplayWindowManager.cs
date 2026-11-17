@@ -45,9 +45,9 @@ public class DisplayWindowManager
         string initialName = "", IEnumerable<string>? existingNames = null)
     {
         var viewModel = _profileNameViewModelFactory.Create();
-        viewModel.Configure(Controllers.LocalizationController.Instance[title], initialName, existingNames);
+        viewModel.Configure(title, initialName, existingNames);
         dynamic settings = new ExpandoObject();
-        settings.Title = Controllers.LocalizationController.Instance[title];
+        settings.Title = title;
         settings.SizeToContent = SizeToContent.WidthAndHeight;
         settings.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         settings.ResizeMode = ResizeMode.NoResize;
@@ -57,19 +57,10 @@ public class DisplayWindowManager
         return result is true ? Result.Ok(viewModel.ProfileName) : Result.Fail("");
     }
 
-    public async Task<string?> OpenSettings(Computer computer)
+    public async Task OpenSettings(Computer computer, Func<Window?, string?> import, Func<Window?, string?> export, Func<Task<string>> checkUpdates, Func<bool> canImport, Func<bool> canExport, Func<string> profileFileContext)
     {
-        var viewModel = _settingsViewModelFactory.Create(computer);
-        dynamic settings = new ExpandoObject();
-        settings.Title = "Settings";
-        settings.MaxHeight = Math.Max(320, SystemParameters.WorkArea.Height - 32);
-        settings.MaxWidth = Math.Max(240, SystemParameters.WorkArea.Width - 24);
-        settings.SizeToContent = SizeToContent.WidthAndHeight;
-        settings.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        settings.ResizeMode = ResizeMode.CanMinimize;
-
-        await _windowManager.ShowDialogAsync(viewModel, null, settings);
-        return viewModel.RestoreFilePath;
+        var viewModel = _settingsViewModelFactory.Create(computer, import, export, checkUpdates, canImport, canExport, profileFileContext);
+        await _windowManager.ShowDialogAsync(viewModel);
     }
 
     public void ShowMessageBox(string message)

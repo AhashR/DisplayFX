@@ -25,15 +25,6 @@ public sealed class ProcessController : IDisposable
     private delegate void WinEventCallback(IntPtr hook, uint eventId, IntPtr window, int objectId, int childId, uint threadId, uint time);
     [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint minimum, uint maximum, IntPtr module, WinEventCallback callback, uint processId, uint threadId, uint flags);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool UnhookWinEvent(IntPtr hook);
-    public bool IsForegroundFullscreen()
-    {
-        var window = GetForegroundWindow();
-        if (window == IntPtr.Zero || !GetWindowRect(window, out var bounds)) return false;
-        var screen = System.Windows.Forms.Screen.FromHandle(window).Bounds;
-        return bounds.Left <= screen.Left && bounds.Top <= screen.Top && bounds.Right >= screen.Right && bounds.Bottom >= screen.Bottom;
-    }
-    [StructLayout(LayoutKind.Sequential)] private struct NativeRectangle { public int Left, Top, Right, Bottom; }
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetWindowRect(IntPtr window, out NativeRectangle rectangle);
     public string? GetForegroundExecutablePath()
     {
         var window = GetForegroundWindow();

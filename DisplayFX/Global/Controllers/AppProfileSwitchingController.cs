@@ -11,8 +11,6 @@ public sealed class AppProfileSwitchingController
 {
     private readonly Dictionary<Monitor, Profile> _baselines = new();
     private string? _lastApplication;
-    private bool _lastFullscreen;
-    private string? _lastPower;
     private long _revision;
     private long _resetRevision;
     private readonly HashSet<Monitor> _invalidated = new();
@@ -29,20 +27,15 @@ public sealed class AppProfileSwitchingController
         => UpdateAsync(application, monitors, profile => Task.FromResult(apply(profile))).GetAwaiter().GetResult();
 
     public async Task UpdateAsync(string? application, IEnumerable<Monitor> monitors, Func<Profile, Task<bool>> apply)
-        => await UpdateAsync(application, monitors, apply, false, "Any");
-
-    public async Task UpdateAsync(string? application, IEnumerable<Monitor> monitors, Func<Profile, Task<bool>> apply, bool fullscreen, string power)
     {
-        if (string.IsNullOrWhiteSpace(application) || string.Equals(application, _lastApplication, StringComparison.OrdinalIgnoreCase) && fullscreen == _lastFullscreen && power == _lastPower) return;
+        if (string.IsNullOrWhiteSpace(application) || string.Equals(application, _lastApplication, StringComparison.OrdinalIgnoreCase)) return;
         var revision = _revision;
         var resetRevision = _resetRevision;
         var allSucceeded = true;
         foreach (var monitor in monitors)
         {
-            var matches = monitor.Profiles.Where(profile => MatchesProfile(profile, application) &&
-                (!profile.FullscreenOnly || fullscreen) && (profile.PowerCondition == "Any" || profile.PowerCondition == power))
-                .OrderByDescending(profile => profile.RulePriority).ToList();
-            var linked = matches.Count > 0 && (matches.Count == 1 || matches[0].RulePriority > matches[1].RulePriority) ? matches[0] : null;
+            var matches = monitor.Profiles.Where(profile => MatchesProfile(profile, application)).Take(2).ToList();
+            var linked = matches.Count == 1 ? matches[0] : null;
             if (linked != null)
             {
                 if (linked.IsActive && !_invalidated.Contains(monitor)) continue;
@@ -94,9 +87,8 @@ public sealed class AppProfileSwitchingController
             }
         }
         // A failed hardware update stays retryable even if the foreground app has not changed.
-        if (allSucceeded && revision == _revision) { _lastApplication = application; _lastFullscreen = fullscreen; _lastPower = power; }
+        if (allSucceeded && revision == _revision) _lastApplication = application;
     }
     public static bool MatchesProfile(Profile profile, string? application) =>
-        ProcessController.MatchesExecutable(profile.LinkedExecutablePath, application) ||
-        profile.AdditionalExecutablePaths.Any(path => ProcessController.MatchesExecutable(path, application));
+        !profile.IsDefault && ProcessController.MatchesExecutable(profile.LinkedExecutablePath, application);
 }

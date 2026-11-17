@@ -16,24 +16,21 @@ namespace DisplayFX.Interface.Help;
 
 public class HelpViewModel : Screen
 {
-    public string VersionText => $"Build: {DisplayFX.Global.AppVersion.Current}";
     private readonly ComputerFactory _computerFactory;
     private readonly DataController _dataController;
     private readonly RegistryController _registryController;
     private readonly BrightnessPersistenceController _brightnessPersistenceController;
     private readonly ILogger _logger;
-    private readonly BrightnessAutomationController? _automation;
 
     public HelpViewModel(DataController dataController, ComputerFactory computerFactory,
         RegistryController registryController, BrightnessPersistenceController brightnessPersistenceController,
-        ILogger logger, BrightnessAutomationController? automation = null)
+        ILogger logger)
     {
         _dataController = dataController;
         _computerFactory = computerFactory;
         _registryController = registryController;
         _brightnessPersistenceController = brightnessPersistenceController;
         _logger = logger;
-        _automation = automation;
 
         OpenWebsiteCommand = new RelayCommand<object>(MyAction);
     }
@@ -66,11 +63,7 @@ public class HelpViewModel : Screen
 
             ResetAndRestart(original.Value, defaults.Value, _dataController.Write,
                 _registryController.RegisterForStartWithWindows,
-                () => Bootstrapper.RestartApplication(() =>
-                {
-                    _automation?.Detach();
-                    _brightnessPersistenceController.Detach();
-                }));
+                () => Bootstrapper.RestartApplication(_brightnessPersistenceController.Detach));
         }
         catch (Exception exception)
         {

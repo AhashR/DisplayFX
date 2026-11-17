@@ -71,20 +71,6 @@ public class BrightnessPersistenceController
     public int? GetRememberedBrightness(Display display) => _computer?.Monitors.FirstOrDefault(monitor =>
         string.Equals(monitor.DisplayDevicePath, display.DevicePath, StringComparison.OrdinalIgnoreCase))?.LastBrightness;
     public DisplayFX.Objects.Entities.Monitor? GetMonitor(Display display) => _computer?.Monitors.FirstOrDefault(monitor => string.Equals(monitor.DisplayDevicePath, display.DevicePath, StringComparison.OrdinalIgnoreCase));
-    public bool PinPopup => _computer?.Features.PinBrightnessPopup == true;
-    public bool ShowHardwareDetails => _computer?.Features.ShowHardwareDetails == true;
-    public string PopupOrder => _computer?.Features.PopupOrder ?? "Saved";
-    public string GetDisplayDetails(Display display)
-    {
-        var monitor = GetMonitor(display);
-        return ShowHardwareDetails && monitor != null ? $"{monitor.Resolution.Width} × {monitor.Resolution.Height} @ {monitor.Frequency} Hz" : "";
-    }
-    public int ClampBrightness(Display display, int value)
-    {
-        var monitor = GetMonitor(display);
-        return Math.Clamp(value, monitor?.MinimumBrightness ?? 0, monitor?.MaximumBrightness ?? 100);
-    }
-
     public void RestoreOnStartup()
     {
         var loadResult = _dataController.Load();

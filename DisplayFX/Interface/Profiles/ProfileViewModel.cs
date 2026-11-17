@@ -30,15 +30,11 @@ public class ProfileViewModel : Screen
     public Action<Guid> ProfileRemoved { get; set; } = null!;
     public Action<Guid>? ProfileDuplicateRequested { get; set; }
     public Action<Guid>? ProfileRenameRequested { get; set; }
-    public Action<Guid>? ProfileExportRequested { get; set; }
-    public Action<Guid>? ProfileFavoriteRequested { get; set; }
     public Action<Guid, int>? ProfileMoveRequested { get; set; }
     public string Name => Profile.Name;
-    public string Icon => Profile.Icon;
-    public string MarkerColor => Profile.MarkerColor;
-    public string FavoriteMark => Profile.IsFavorite ? "★" : "";
-    public string AccessibleDescription => DisplayFX.Global.Controllers.LocalizationController.Instance[IsActive ? "Active profile" : "Inactive profile"] + ". " +
-        (Profile.IsFavorite ? DisplayFX.Global.Controllers.LocalizationController.Instance["Favorite"] + ". " : "") + Profile.Notes;
+    public string Icon => ProfileIcons.Glyph(Profile.Icon);
+    public Action<ProfileViewModel, string>? IconRequested { get; set; }
+    public Action<ProfileViewModel>? ClearShortcutRequested { get; set; }
     public Guid Guid { get; set; }
 
     public ProfileSettingViewModel? ProfileSettings
@@ -63,8 +59,7 @@ public class ProfileViewModel : Screen
             if (value == Profile.IsActive) return;
             Profile.IsActive = value;
             NotifyOfPropertyChange();
-            NotifyOfPropertyChange(nameof(AccessibleDescription));
-        }
+            }
     }
 
     public bool IsSelected
@@ -103,11 +98,28 @@ public class ProfileViewModel : Screen
     private void CreateContextMenu()
     {
         ContextMenu = new ContextMenu();
-        AddMenuItem("Favorite / unfavorite", () => ProfileFavoriteRequested?.Invoke(Guid));
+        ContextMenu.Opened += (_, _) => BuildMenu();
+        BuildMenu();
+    }
+
+    private void BuildMenu()
+    {
+        ContextMenu.Items.Clear();
+        var icons = new MenuItem { Header = "Choose icon" };
+        foreach (var icon in ProfileIcons.Choices)
+        {
+            var option = new MenuItem { Header = icon.Label, IsCheckable = true, IsChecked = Profile.Icon == icon.Id,
+                Icon = new TextBlock { Text = icon.Glyph, FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets") } };
+            option.Click += (_, _) => IconRequested?.Invoke(this, icon.Id);
+            icons.Items.Add(option);
+        }
+        ContextMenu.Items.Add(icons);
+        ContextMenu.Items.Add(new Separator());
+        if (Profile.HotkeyKey is not (null or System.Windows.Input.Key.None))
+            AddMenuItem("Remove existing profile shortcut", () => ClearShortcutRequested?.Invoke(this));
         AddMenuItem("Move up", () => ProfileMoveRequested?.Invoke(Guid, -1));
         AddMenuItem("Move down", () => ProfileMoveRequested?.Invoke(Guid, 1));
         AddMenuItem("Duplicate", () => ProfileDuplicateRequested?.Invoke(Guid));
-        AddMenuItem("Export profile...", () => ProfileExportRequested?.Invoke(Guid));
         if (Profile.IsDefault)
             return;
 
@@ -115,7 +127,7 @@ public class ProfileViewModel : Screen
         ContextMenu.Items.Add(new Separator());
         var menuItem1 = new MenuItem
         {
-            Header = DisplayFX.Global.Controllers.LocalizationController.Instance["Remove"]
+            Header = "Remove"
         };
         menuItem1.Click += OnRemoveClicked;
         ContextMenu.Items.Add(menuItem1);
@@ -123,7 +135,7 @@ public class ProfileViewModel : Screen
 
     private void AddMenuItem(string header, System.Action action)
     {
-        var item = new MenuItem { Header = DisplayFX.Global.Controllers.LocalizationController.Instance[header] };
+        var item = new MenuItem { Header = header };
         item.Click += (_, _) => action();
         ContextMenu.Items.Add(item);
     }
@@ -131,8 +143,8 @@ public class ProfileViewModel : Screen
     public void RefreshName() => NotifyOfPropertyChange(nameof(Name));
     public void RefreshMetadata()
     {
-        CreateContextMenu(); NotifyOfPropertyChange(nameof(ContextMenu));
-        foreach (var property in new[] { nameof(Name), nameof(Icon), nameof(MarkerColor), nameof(FavoriteMark), nameof(AccessibleDescription) }) NotifyOfPropertyChange(property);
+        if (!ContextMenu.IsOpen) BuildMenu();
+        foreach (var property in new[] { nameof(Name), nameof(Icon) }) NotifyOfPropertyChange(property);
     }
 
     private void OnRemoveClicked(object sender, RoutedEventArgs e)

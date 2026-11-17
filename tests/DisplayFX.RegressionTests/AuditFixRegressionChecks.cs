@@ -106,11 +106,12 @@ internal static class AuditFixRegressionChecks
             switching.Update("game.exe", computer.Monitors, Apply);
             Check(applies == 2 && game.IsActive, "An invalidated active profile must be reapplied after reconnect.");
             Check(manual.IsActiveBeforeAutomaticSwitch == true, "Reapplying an automatic profile must retain its original baseline.");
-            manual.LinkedExecutablePath = "game.exe";
+            var duplicateLink = new Profile(monitor, "Duplicate", new(.5, .5, 1, .5), false) { LinkedExecutablePath = "game.exe" };
+            monitor.Profiles.Add(duplicateLink);
             Check(ProfileTransferController.GetExecutableConflict(game) != null, "Duplicate executable links must be reported.");
             switching.Refresh(); switching.Update("game.exe", computer.Monitors, Apply);
             Check(manual.IsActive, "Ambiguous executable links must restore the manual baseline instead of choosing a winner.");
-            manual.LinkedExecutablePath = null;
+            monitor.Profiles.Remove(duplicateLink);
             var export = Path.Combine(directory, "profile.json");
             ProfileTransferController.ExportProfile(game, export);
             var imported = ProfileTransferController.ReadProfile(export, monitor);
@@ -121,19 +122,6 @@ internal static class AuditFixRegressionChecks
             File.WriteAllText(invalidData.DataPath, "{\"Monitors\":[{\"DisplayDevicePath\":\"one\",\"Name\":\"One\",\"Profiles\":[],\"LastBrightness\":1000}]}");
             Check(invalidData.Load().IsFailed, "Invalid stored monitor capacities and brightness must be rejected before use.");
             monitor.Profiles.Remove(game); manual.IsActive = true; manual.IsActiveBeforeAutomaticSwitch = null;
-            computer.IsBrightnessScheduleEnabled = true;
-            computer.BrightnessSchedules = new() { new() { Time = "08:00", Brightness = 80 } };
-            using (var automation = new FixtureAutomation(cache, hardware, persistence))
-            {
-                automation.Attach(computer); automation.Now = new(2026, 10, 29, 7, 59, 0); automation.Start();
-                hardware.FailWrites = true;
-                Pump(async () => { automation.Now = new(2026, 10, 29, 8, 1, 0); automation.Tick(); await automation.Work; });
-                hardware.FailWrites = false;
-                Pump(async () => { automation.Now = new(2026, 10, 29, 8, 2, 0); automation.Tick(); await automation.Work; });
-                Check(hardware.Level == 80 && monitor.LastBrightness == 80, "A temporarily failed schedule must retry only failed outputs after recovery.");
-            }
-            var draft = new BrightnessSchedule { Time = "08:00", BrightnessInput = "bad" };
-            Check(!draft.IsValid && draft.BrightnessInput == "bad", "Numeric draft validation must live in the model and survive page destruction.");
             count += NativeLockChecks();
             count += IdentityChecks();
             count += ProfileApplicationChecks(directory);
@@ -257,10 +245,10 @@ internal static class AuditFixRegressionChecks
     { private readonly Display[] _displays; public FixtureCache(params Display[] displays)=>_displays=displays; public override void Refresh(){} public override IReadOnlyList<Display> GetDisplays()=>_displays; }
     private sealed class FixtureBrightness : MonitorBrightnessController
     {
-        public FixtureBrightness():base(Logger){} public int Level=40, Writes; public bool FailWrites; public Action? AfterWrite, AfterRead;
+        public FixtureBrightness():base(Logger){} public int Level=40, Writes; public Action? AfterWrite, AfterRead;
         public override bool SupportsBrightness(Display display)=>true;
         public override int? GetBrightness(Display display) {var level=Level; RecordStatus(display,new("",false,level));AfterRead?.Invoke();return level;}
-        public override bool SetBrightness(Display display,int value) {Writes++;if(FailWrites)return false;External(display,value);AfterWrite?.Invoke();return true;}
+        public override bool SetBrightness(Display display,int value) {Writes++;External(display,value);AfterWrite?.Invoke();return true;}
         public void External(Display display,int value){Level=value;RecordStatus(display,new("",false,value));}
     }
     private sealed class NativeFixture : MonitorBrightnessController
@@ -271,14 +259,6 @@ internal static class AuditFixRegressionChecks
         protected override void ReleasePhysicalMonitors(PhysicalMonitor[] monitors){}
         protected override bool ReadHighLevel(IntPtr handle,out uint min,out uint current,out uint max){min=0;current=Level;max=100;return true;}
         protected override bool WriteHighLevel(IntPtr handle,uint value){Writes++;Level=value;return true;}
-    }
-    private sealed class FixtureAutomation : BrightnessAutomationController
-    {
-        public FixtureAutomation(DisplayCache cache,MonitorBrightnessController hardware,BrightnessPersistenceController persistence):base(cache,hardware,persistence,Logger){}
-        public DateTime Now; protected override DateTime LocalNow=>Now;
-        public void Tick()=>typeof(BrightnessAutomationController).GetMethod("OnTimerTick",Instance)!.Invoke(this,new object?[]{null,EventArgs.Empty});
-        public Task Work=>(Task)typeof(BrightnessAutomationController).GetField("_worker",Instance)!.GetValue(this)!;
-        protected override void RemoveHotkeys(){}
     }
     private sealed class FixtureColors : DisplayController
     {
@@ -291,7 +271,7 @@ internal static class AuditFixRegressionChecks
     {
         // Instances are created without running startup or touching attached hardware.
         private FixtureNvidiaShell() : base(null!, null!, null!, null!, null!, null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!) { }
+            null!, null!, null!, null!, null!, null!, null!, null!) { }
         public bool Fail;
         public int Attempts;
         public List<NvAPIWrapper.Display.Display>? Displays;

@@ -27,19 +27,17 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
     private string _statusMessage = "";
     private bool _hasError;
     private bool _refreshing;
+    private bool _initializing;
     private bool _hasKnownBrightness;
     private long _editVersion;
-    private readonly int _minimumBrightness;
-    private readonly int _maximumBrightness;
 
     public BrightnessMonitorViewModel(Display display, MonitorBrightnessController brightnessController,
         Action<BrightnessMonitorViewModel, double>? brightnessChanged = null,
         Action<Display, int>? brightnessApplied = null, string? name = null, int? rememberedBrightness = null,
-        bool deferInitialization = false, int minimumBrightness = 0, int maximumBrightness = 100, string details = "")
+        bool deferInitialization = false, string details = "")
     {
         Display = display;
         Details = details;
-        _minimumBrightness = minimumBrightness; _maximumBrightness = maximumBrightness;
         _brightnessController = brightnessController;
         _brightnessChanged = brightnessChanged;
         _brightnessApplied = brightnessApplied;
@@ -50,8 +48,9 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
         var known = current ?? brightnessController.GetLastKnownBrightness(display) ?? rememberedBrightness;
         _brightness = known ?? 0;
         _hasKnownBrightness = known.HasValue;
-        HasError = !current.HasValue && !brightnessController.IsDisplaySleeping;
-        StatusMessage = current.HasValue ? "" : "Brightness unavailable. Check the monitor connection and DDC/CI setting.";
+        _initializing = deferInitialization;
+        HasError = !deferInitialization && !current.HasValue && !brightnessController.IsDisplaySleeping;
+        StatusMessage = HasError ? "Brightness unavailable. Check the monitor connection and DDC/CI setting." : "";
         _writeDebounce = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
         { Interval = TimeSpan.FromMilliseconds(120) };
         _writeDebounce.Tick += OnWriteTick;
@@ -65,14 +64,20 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
 
     private async Task InitializeAsync(bool resolveName)
     {
-        if (resolveName)
+        try
         {
-            var name = await Task.Run(() => ResolveName(Display));
+            await Dispatcher.Yield(DispatcherPriority.Background);
             if (_disposed) return;
-            Name = name;
-            NotifyOfPropertyChange(nameof(Name));
+            if (resolveName)
+            {
+                var name = await Task.Run(() => ResolveName(Display));
+                if (_disposed) return;
+                Name = name;
+                NotifyOfPropertyChange(nameof(Name));
+            }
+            await RefreshBrightnessAsync();
         }
-        await RefreshBrightnessAsync();
+        finally { _initializing = false; }
     }
 
     public Display Display { get; private set; }
@@ -102,7 +107,7 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
     private void QueueBrightness(double value, bool broadcast)
     {
         if (_disposed || !SupportsBrightness || !double.IsFinite(value)) return;
-        var target = (int)Math.Round(Math.Clamp(value, _minimumBrightness, _maximumBrightness));
+        var target = (int)Math.Round(Math.Clamp(value, 0, 100));
         if (target == _brightness && !HasError) return;
         _editVersion++;
         _brightness = target;
@@ -240,7 +245,7 @@ public class BrightnessMonitorViewModel : Screen, IDisposable
         var version = _brightnessController.GetVersion(display);
         void Update()
         {
-            if (_disposed || version != _brightnessController.GetVersion(display) || _refreshing || _writeInFlight || _pendingBrightness.HasValue || _brightnessController.IsDisplaySleeping) return;
+            if (_disposed || version != _brightnessController.GetVersion(display) || _initializing || _refreshing || _writeInFlight || _pendingBrightness.HasValue || _brightnessController.IsDisplaySleeping) return;
             HasError = status.IsError;
             StatusMessage = status.IsError ? status.Message : "";
             if (!status.IsError && status.Brightness.HasValue)

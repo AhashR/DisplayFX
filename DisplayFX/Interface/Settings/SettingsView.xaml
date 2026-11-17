@@ -1,81 +1,65 @@
-<Window FontSize="{DynamicResource ContentFontSize}" x:Class="DisplayFX.Interface.Settings.SettingsView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="{DynamicResource WindowBackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}" Width="700" SizeToContent="Height" ResizeMode="CanMinimize" Title="{DynamicResource UiText74A883A037BC}" WindowStyle="SingleBorderWindow" Style="{x:Null}" WindowStartupLocation="CenterOwner" BorderBrush="{DynamicResource BorderColorBrush}" BorderThickness="1" Icon="pack://application:,,,/DisplayFX;component/Resources/desktop.png">
+<Window x:Class="DisplayFX.Interface.Settings.SettingsView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" FontFamily="Segoe UI" FontSize="{DynamicResource ContentFontSize}" Language="en-GB"
+        Width="550" SizeToContent="Height" WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        WindowStyle="SingleBorderWindow" Style="{x:Null}" UseLayoutRounding="True"
+        Background="{DynamicResource WindowBackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}"
+        BorderBrush="{DynamicResource BorderColorBrush}" BorderThickness="1"
+        Icon="pack://application:,,,/DisplayFX;component/Resources/desktop.png">
  <Window.Resources>
-  <BooleanToVisibilityConverter x:Key="BoolVisibility" />
-  <Style TargetType="TextBox">
-   <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" /><Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-   <Setter Property="BorderBrush" Value="{DynamicResource BorderColorBrush}" /><Setter Property="Padding" Value="8,5" />
+  <Style x:Key="SettingsSection" TargetType="TextBlock">
+   <Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,0,0,6"/>
+  </Style>
+  <Style x:Key="SettingsCard" TargetType="Border">
+   <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
+   <Setter Property="BorderBrush" Value="{DynamicResource BorderColorBrush}"/>
+   <Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="6"/>
+   <Setter Property="Margin" Value="0,0,0,14"/>
+  </Style>
+  <Style x:Key="SettingsToggle" TargetType="CheckBox" BasedOn="{StaticResource ToggleSwitchStyle}">
+   <Setter Property="Padding" Value="11,9"/>
+   <Setter Property="Margin" Value="11,8"/>
   </Style>
  </Window.Resources>
- <ScrollViewer MaxHeight="520" Padding="16" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
- <Grid Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}" MinWidth="620" Background="{DynamicResource WindowBackgroundBrush}">
-  <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-  <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-  <Border Background="{DynamicResource CardBackgroundBrush}" CornerRadius="12" Padding="16" VerticalAlignment="Top">
-   <StackPanel>
-    <TextBlock Text="{DynamicResource UiTextC910D474DCD7}" FontSize="{DynamicResource ContentFontSize}" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,16" />
-    <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsStartWithWindows}" Content="{DynamicResource UiTextE46497AF214F}" Margin="0,0,0,16" />
-    <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsStartMinimized}" Content="{DynamicResource UiTextB832D91973D4}" Margin="0,0,0,16" />
-    <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsMinimizeToTray}" Content="{DynamicResource UiTextC7BA65E589B0}" Margin="0,0,0,16" ToolTip="{DynamicResource UiText3FE4EACC606B}" />
-    <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsApplySettingsOnStart}" Content="{DynamicResource UiText8C0A2AD8BF61}" Margin="0,0,0,16" ToolTip="{DynamicResource UiText258796E29B89}" />
-    <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsRememberBrightnessOnStart}" Content="{DynamicResource UiText9E1EACE9DF84}" ToolTip="{DynamicResource UiTextBB7102B8A558}" />
-    <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsColorDiagnosticsEnabled}" Content="{DynamicResource UiTextA99414434418}" Margin="0,16,0,0" ToolTip="{DynamicResource UiTextADD201B453F5}" />
-    <Button Name="OpenLogs" Content="{DynamicResource UiText3FA6DFFA2E79}" Style="{DynamicResource DarkThemeButtonStyle}" Margin="0,12,0,0" />
-    <Border Height="1" Background="{DynamicResource BorderColorBrush}" Margin="0,20" />
-    <TextBlock Text="{DynamicResource UiText9FC699129AB1}" FontSize="{DynamicResource ContentFontSize}" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,10" />
-    <Grid>
-     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-     <Button Name="BackupSettings" Style="{DynamicResource DarkThemeButtonStyle}" ToolTip="{DynamicResource UiText9EB9496483BE}" AutomationProperties.Name="{DynamicResource UiText3A491EF495C5}">
-      <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="" Margin="0,0,8,0" VerticalAlignment="Center" /><TextBlock Text="{DynamicResource UiText0054E707D5A9}" /></StackPanel>
-     </Button>
-     <Button Grid.Column="2" Name="RestoreSettings" Style="{DynamicResource DarkThemeButtonStyle}" ToolTip="{DynamicResource UiText684635666A4D}" AutomationProperties.Name="{DynamicResource UiText630015CA48F7}">
-      <StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="" Margin="0,0,8,0" VerticalAlignment="Center" /><TextBlock Text="{DynamicResource UiTextA76E13B98392}" /></StackPanel>
-     </Button>
-    </Grid>
-   </StackPanel>
-  </Border>
-  <Border Grid.Column="2" Background="{DynamicResource CardBackgroundBrush}" CornerRadius="12" Padding="16">
-   <StackPanel>
-    <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsBrightnessShortcutsEnabled}" Content="{DynamicResource UiText58D53E35A641}" Margin="0,0,0,10" />
-    <Grid IsEnabled="{Binding IsBrightnessShortcutsEnabled}">
-     <Grid.ColumnDefinitions><ColumnDefinition Width="28" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-     <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
-     <TextBlock Text="" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" ToolTip="{DynamicResource UiTextD46FA4EC9615}" />
-     <Button Grid.Column="1" Content="{Binding IncreaseShortcutText}" Click="IncreaseShortcut_Click" PreviewKeyDown="Shortcut_PreviewKeyDown" LostKeyboardFocus="Shortcut_LostKeyboardFocus" Style="{DynamicResource DarkThemeButtonStyle}" Margin="0,0,0,6" ToolTip="{DynamicResource UiTextFAFC1914712F}" AutomationProperties.Name="{DynamicResource UiTextE2B1C6BD2ACC}" />
-     <TextBlock Grid.Row="1" Text="" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" ToolTip="{DynamicResource UiTextCC0E83CFFC63}" />
-     <Button Grid.Row="1" Grid.Column="1" Content="{Binding DecreaseShortcutText}" Click="DecreaseShortcut_Click" PreviewKeyDown="Shortcut_PreviewKeyDown" LostKeyboardFocus="Shortcut_LostKeyboardFocus" Style="{DynamicResource DarkThemeButtonStyle}" Margin="0,0,0,6" ToolTip="{DynamicResource UiText5E7ECC6DEA56}" AutomationProperties.Name="{DynamicResource UiText3BA2D4C4F924}" />
-     <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{DynamicResource UiTextB75D0984DB2C}" VerticalAlignment="Center" FontSize="{DynamicResource ContentFontSize}" />
-     <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding BrightnessShortcutStep, UpdateSourceTrigger=LostFocus}" Width="60" HorizontalAlignment="Right" AutomationProperties.Name="{DynamicResource UiText2DE27BF28AB8}" />
-    </Grid>
-    <TextBlock Text="{Binding ShortcutStatus}" TextWrapping="Wrap" FontSize="11" Foreground="#F0B86E" Margin="0,4,0,0" Visibility="{Binding HasShortcutError, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="{DynamicResource UiText8F6C42AA405D}" />
-    <Border Height="1" Background="{DynamicResource BorderColorBrush}" Margin="0,8" />
-    <CheckBox Style="{DynamicResource ToggleSwitchStyle}" IsChecked="{Binding IsBrightnessScheduleEnabled}" Content="{DynamicResource UiText5E5F38D444FA}" Margin="0,0,0,6" ToolTip="{DynamicResource UiTextE9B6C74CD365}" />
-    <Grid Margin="0,0,0,4"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition Width="36" /></Grid.ColumnDefinitions>
-     <TextBlock Text="{DynamicResource UiText33B93476CF59}" FontSize="{DynamicResource ContentFontSize}" Foreground="{DynamicResource TextMutedBrush}" /><TextBlock Grid.Column="1" Text="{DynamicResource UiText45443A65BBC5}" FontSize="{DynamicResource ContentFontSize}" Foreground="{DynamicResource TextMutedBrush}" />
-    </Grid>
-    <ItemsControl ItemsSource="{Binding VisibleSchedules}"><ItemsControl.ItemTemplate><DataTemplate>
-     <Grid Margin="0,3"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition Width="36" /></Grid.ColumnDefinitions>
-      <TextBox Text="{Binding Time, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" ToolTip="{DynamicResource UiText2A35C4A66F81}" AutomationProperties.Name="{DynamicResource UiText04B60058D9BA}" />
-      <TextBox Grid.Column="1" Text="{Binding BrightnessInput, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" ToolTip="{DynamicResource UiText7F374CEBAAD9}" AutomationProperties.Name="{DynamicResource UiText425EABBDD552}" />
-      <Button Grid.Column="2" Content="" Click="RemoveSchedule_Click" Style="{DynamicResource IconButtonStyle}" ToolTip="{DynamicResource UiTextAC0BA4E76426}" AutomationProperties.Name="{DynamicResource UiText3F35C2F9959E}" />
-     </Grid>
-    </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Visibility="{Binding HasSchedulePages, Converter={StaticResource BoolVisibility}}">
-     <Button Name="PreviousSchedulePage" Content="" Style="{DynamicResource IconButtonStyle}" IsEnabled="{Binding CanPreviousSchedulePage}" ToolTip="{DynamicResource UiText8F3B92601C9D}" AutomationProperties.Name="{DynamicResource UiText73F0BD62F953}" />
-     <TextBlock Text="{Binding SchedulePageText}" VerticalAlignment="Center" Foreground="{DynamicResource TextMutedBrush}" Margin="4,0" />
-     <Button Name="NextSchedulePage" Content="" Style="{DynamicResource IconButtonStyle}" IsEnabled="{Binding CanNextSchedulePage}" ToolTip="{DynamicResource UiText2AC6695D6165}" AutomationProperties.Name="{DynamicResource UiText011D4FBCA50A}" />
+ <ScrollViewer x:Name="SettingsScroll" Background="{DynamicResource WindowBackgroundBrush}" VerticalScrollBarVisibility="Auto"
+               HorizontalScrollBarVisibility="Disabled" MaxHeight="510">
+  <StackPanel Margin="18,14,18,16">
+   <TextBlock Text="Settings" FontSize="26" FontWeight="SemiBold" Margin="0,0,0,12"/>
+   <TextBlock Text="General" Style="{StaticResource SettingsSection}"/>
+   <Border Style="{StaticResource SettingsCard}">
+    <StackPanel>
+     <CheckBox x:Name="LaunchWithWindows" Style="{StaticResource SettingsToggle}" IsChecked="{Binding IsStartWithWindows}" Content="Launch with Windows"/>
+     <Border Height="1" Background="{DynamicResource BorderColorBrush}"/>
+     <CheckBox x:Name="StartMinimised" Style="{StaticResource SettingsToggle}" IsChecked="{Binding IsStartMinimized}" Content="Start minimised"/>
+     <Border Height="1" Background="{DynamicResource BorderColorBrush}"/>
+     <CheckBox x:Name="CloseToTray" Style="{StaticResource SettingsToggle}" IsChecked="{Binding IsMinimizeToTray}" Content="Close to tray" ToolTip="{DynamicResource UiText3FE4EACC606B}"/>
     </StackPanel>
-    <Grid Margin="0,6,0,0">
-     <Button Name="AddSchedule" Content="" Style="{DynamicResource IconButtonStyle}" HorizontalAlignment="Left" ToolTip="{DynamicResource UiTextA48FA9B18648}" AutomationProperties.Name="{DynamicResource UiText89611B47026B}" />
-     <Button Content="" Click="SaveBrightnessAutomation_Click" Style="{DynamicResource PrimaryIconButtonStyle}" HorizontalAlignment="Right" ToolTip="{DynamicResource UiTextE75696D5EA78}" AutomationProperties.Name="{DynamicResource UiTextAE9618FE874B}" />
-    </Grid>
-    <TextBlock Text="{Binding AutomationStatus}" TextTrimming="CharacterEllipsis" ToolTip="{Binding AutomationStatus}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,8,0,0" AutomationProperties.Name="{DynamicResource UiTextFA2EDEC8107E}" />
-   </StackPanel>
-  </Border>
-  <Grid Grid.Row="1" Grid.ColumnSpan="3" Margin="0,12,0,0">
-   <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="36" /></Grid.ColumnDefinitions>
-   <TextBlock Text="{Binding SettingsStatus}" TextTrimming="CharacterEllipsis" ToolTip="{Binding SettingsStatus}" FontSize="{DynamicResource ContentFontSize}" Foreground="{DynamicResource AccentBlueBrush}" VerticalAlignment="Center" Margin="0,0,12,0" />
-   <Button Grid.Column="1" Name="Done" Content="" Style="{DynamicResource IconButtonStyle}" ToolTip="{DynamicResource UiText11A6767D5674}" AutomationProperties.Name="{DynamicResource UiText11A6767D5674}" />
-  </Grid>
- </Grid>
+   </Border>
+   <TextBlock Text="Profile files" Style="{StaticResource SettingsSection}"/>
+   <Border Style="{StaticResource SettingsCard}" Padding="11,9">
+    <StackPanel>
+     <TextBlock Text="{Binding ProfileFileContext}" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,7"/>
+     <WrapPanel>
+      <Button x:Name="ImportProfile" Content="Import profile" IsEnabled="{Binding CanImportProfile}" Command="{Binding ImportProfileCommand}" Style="{DynamicResource FluentButtonStyle}" Margin="0,0,6,3"/>
+      <Button x:Name="ExportProfile" Content="Export profile" IsEnabled="{Binding CanExportProfile}" Command="{Binding ExportProfileCommand}" Style="{DynamicResource FluentButtonStyle}" Margin="0,0,0,3"/>
+     </WrapPanel>
+    </StackPanel>
+   </Border>
+   <TextBlock Text="About" Style="{StaticResource SettingsSection}"/>
+   <Border Style="{StaticResource SettingsCard}" Padding="11,9" Margin="0">
+    <DockPanel LastChildFill="True">
+     <Button DockPanel.Dock="Right" Content="Check for updates" IsEnabled="{Binding CanCheckForUpdates}" Click="CheckForUpdates_Click" Style="{DynamicResource FluentButtonStyle}" Margin="6,0,0,0"/>
+     <TextBlock x:Name="InstalledVersion" Text="{Binding VersionText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+    </DockPanel>
+   </Border>
+   <TextBlock Text="{Binding SettingsStatus}" TextWrapping="Wrap" Foreground="{DynamicResource TextMutedBrush}" AutomationProperties.LiveSetting="Polite">
+    <TextBlock.Style>
+     <Style TargetType="TextBlock"><Setter Property="Margin" Value="0,10,0,0"/>
+      <Style.Triggers><DataTrigger Binding="{Binding SettingsStatus}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers>
+     </Style>
+    </TextBlock.Style>
+   </TextBlock>
+  </StackPanel>
  </ScrollViewer>
 </Window>

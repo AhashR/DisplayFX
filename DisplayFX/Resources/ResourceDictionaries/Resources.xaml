@@ -1,16 +1,81 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:sys="clr-namespace:System;assembly=mscorlib">
-    <sys:Double x:Key="ContentFontSize">13</sys:Double><sys:Double x:Key="IconSize">40</sys:Double><Thickness x:Key="ControlPadding">12,9,12,9</Thickness><SolidColorBrush x:Key="SelectedForegroundBrush" Color="#EAF0F8" /><SolidColorBrush x:Key="PrimaryActionBrush" Color="#31577F" /><SolidColorBrush x:Key="PrimaryActionTextBrush" Color="#FFFFFF" /><SolidColorBrush x:Key="HoverBrush" Color="#303D50" /><SolidColorBrush x:Key="SelectedBrush" Color="#293B52" /><SolidColorBrush x:Key="WindowBackgroundBrush" Color="#11151C" />
-    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A202A" />
-    <SolidColorBrush x:Key="CardHeaderBackgroundBrush" Color="#212936" />
-    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#212936" />
-    <SolidColorBrush x:Key="BorderColorBrush" Color="#303A49" />
-    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#EAF0F8" />
-    <SolidColorBrush x:Key="TextMutedBrush" Color="#A0AEC0" />
-    <SolidColorBrush x:Key="AccentBlueBrush" Color="#80B5FA" />
-    <SolidColorBrush x:Key="AccentBlueHoverBrush" Color="#A4CCFF" />
-    <SolidColorBrush x:Key="MahApps.Brushes.Accent" Color="#80B5FA" />
-    <SolidColorBrush x:Key="AccentColorBrush" Color="#80B5FA" />
-    <SolidColorBrush x:Key="IdealForegroundColorBrush" Color="#11151C" />
+    <sys:Double x:Key="ContentFontSize">13</sys:Double><sys:Double x:Key="IconSize">40</sys:Double><Thickness x:Key="ControlPadding">12,9,12,9</Thickness><SolidColorBrush x:Key="SelectedForegroundBrush" Color="#F5F5F5" /><SolidColorBrush x:Key="PrimaryActionBrush" Color="#60CDFF" /><SolidColorBrush x:Key="PrimaryActionTextBrush" Color="#10232D" /><SolidColorBrush x:Key="HoverBrush" Color="#353535" /><SolidColorBrush x:Key="SelectedBrush" Color="#343434" /><SolidColorBrush x:Key="WindowBackgroundBrush" Color="#202020" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#292929" />
+    <SolidColorBrush x:Key="CardHeaderBackgroundBrush" Color="#303030" />
+    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#303030" />
+    <SolidColorBrush x:Key="BorderColorBrush" Color="#424242" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F5F5F5" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="#C4C4C4" />
+    <SolidColorBrush x:Key="AccentBlueBrush" Color="#60CDFF" />
+    <SolidColorBrush x:Key="AccentBlueHoverBrush" Color="#89DAFF" />
+    <SolidColorBrush x:Key="MahApps.Brushes.Accent" Color="#60CDFF" />
+    <SolidColorBrush x:Key="AccentColorBrush" Color="#60CDFF" />
+    <SolidColorBrush x:Key="IdealForegroundColorBrush" Color="#202020" />
+    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#1C1C1C" />
+    <Style x:Key="FluentButtonStyle" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" /><Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColorBrush}" /><Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="12,4" /><Setter Property="MinHeight" Value="32" />
+        <Setter Property="FontSize" Value="{DynamicResource ContentFontSize}" />
+        <Setter Property="Template"><Setter.Value>
+            <ControlTemplate TargetType="Button">
+                <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.84" /></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.68" /></Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}" /></Trigger>
+                    <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.42" /></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value></Setter>
+    </Style>
+    <Style x:Key="FluentPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource FluentButtonStyle}">
+        <Setter Property="Background" Value="{DynamicResource PrimaryActionBrush}" /><Setter Property="Foreground" Value="{DynamicResource PrimaryActionTextBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" /><Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style x:Key="FluentIconButtonStyle" TargetType="Button" BasedOn="{StaticResource FluentButtonStyle}">
+        <Setter Property="Width" Value="34" /><Setter Property="Height" Value="32" /><Setter Property="Padding" Value="0" />
+        <Setter Property="FontFamily" Value="Segoe MDL2 Assets" /><Setter Property="FontSize" Value="15" />
+        <Setter Property="Background" Value="{DynamicResource SidebarBackgroundBrush}" /><Setter Property="BorderBrush" Value="Transparent" />
+        <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger></Style.Triggers>
+    </Style>
+    <ControlTemplate x:Key="FluentNavTemplate" TargetType="ButtonBase">
+        <Border x:Name="Surface" CornerRadius="5" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="1">
+            <Grid>
+                <Border x:Name="SelectionBar" Width="3" Height="16" Background="{DynamicResource AccentBlueBrush}" CornerRadius="1.5"
+                        HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="Collapsed" />
+                <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}" /></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.42" /></Trigger>
+            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SelectedBrush}" />
+                <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}, FallbackValue=False}" Value="True">
+                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SelectedBrush}" />
+                <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+    <Style x:Key="FluentProfileNavStyle" TargetType="Button">
+        <Setter Property="Template" Value="{StaticResource FluentNavTemplate}" /><Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" /><Setter Property="FontSize" Value="{DynamicResource ContentFontSize}" />
+        <Setter Property="Padding" Value="10,4" /><Setter Property="MinHeight" Value="33" /><Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Style.Triggers><DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="Foreground" Value="{DynamicResource SelectedForegroundBrush}" /></DataTrigger></Style.Triggers>
+    </Style>
+    <Style x:Key="FluentMonitorNavStyle" TargetType="ToggleButton">
+        <Setter Property="Template" Value="{StaticResource FluentNavTemplate}" /><Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" /><Setter Property="FontSize" Value="{DynamicResource ContentFontSize}" />
+        <Setter Property="Padding" Value="10,4" /><Setter Property="MinHeight" Value="33" /><Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Style.Triggers><Trigger Property="IsChecked" Value="True"><Setter Property="Foreground" Value="{DynamicResource SelectedForegroundBrush}" /></Trigger></Style.Triggers>
+    </Style>
+
     <Style x:Key="DarkThemeButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
@@ -120,66 +185,40 @@
     </Style>
 
     <sys:String x:Key="UiText0054E707D5A9">Back up</sys:String>
-    <sys:String x:Key="UiText011D4FBCA50A">Next scheduled times</sys:String>
-    <sys:String x:Key="UiText047F9E0D8486">Vibrance %</sys:String>
-    <sys:String x:Key="UiText04A7D9AFDFDA">Minimum / maximum brightness (%)</sys:String>
-    <sys:String x:Key="UiText04B60058D9BA">Daily time</sys:String>
-    <sys:String x:Key="UiText064F7BB753F3">Contrast percent</sys:String>
-    <sys:String x:Key="UiText067C292245C0">Device path (empty = all)</sys:String>
     <sys:String x:Key="UiText06D1AE6BCB25">Save metadata</sys:String>
-    <sys:String x:Key="UiText085962A7D65D">Pause automatic profiles (minutes)</sys:String>
     <sys:String x:Key="UiText08795BA031BC">Contrast</sys:String>
     <sys:String x:Key="UiText08AD630CFBFA">Open backup folder</sys:String>
-    <sys:String x:Key="UiText08D30423368B">Update checks contact the public DisplayFX GitHub repository only when requested. Installation is always started by you. Local test builds are unsigned until a publisher certificate is configured.</sys:String>
-    <sys:String x:Key="UiText0A91C9649AE1">Vibrance percent</sys:String>
+    <sys:String x:Key="UiText08D30423368B">Update checks contact the public DisplayFX GitHub repository only when requested. Installation is always started by you. Local builds may be unsigned.</sys:String>
     <sys:String x:Key="UiText0B3A4BB782F5">Reset all data. Restarts application.</sys:String>
-    <sys:String x:Key="UiText0C1274A2C4BD">Copy saved colors</sys:String>
+    <sys:String x:Key="UiText0C1274A2C4BD">Copy saved colours</sys:String>
     <sys:String x:Key="UiText0C8209E72EC8">Save profile</sys:String>
-    <sys:String x:Key="UiText118FD7EA1832">Daily / weekly brightness schedules</sys:String>
+    <sys:String x:Key="UiText118FD7EA1832">Daily brightness schedules</sys:String>
     <sys:String x:Key="UiText11A6767D5674">Done</sys:String>
-    <sys:String x:Key="UiText13393F2CEDE2">Offset minutes</sys:String>
     <sys:String x:Key="UiText1509F561F241">Save</sys:String>
     <sys:String x:Key="UiText17C1E0492BA3">Custom monitor name</sys:String>
     <sys:String x:Key="UiText182FE3D3D6B5">Manually match a disconnected saved panel to the selected connected display</sys:String>
     <sys:String x:Key="UiText19766ED6CCB2">Cancel</sys:String>
     <sys:String x:Key="UiText20B78464E1E3">Freepik</sys:String>
     <sys:String x:Key="UiText22E2BADA8F1C">Updates</sys:String>
-    <sys:String x:Key="UiText2309F1E60B2A">Reapply colors after wake</sys:String>
-    <sys:String x:Key="UiText2322073DE38E">Linked offset (%)</sys:String>
-    <sys:String x:Key="UiText238A676DA45A">Latitude</sys:String>
     <sys:String x:Key="UiText258796E29B89">Apply the active saved profile on launch</sys:String>
     <sys:String x:Key="UiText268F14BBFE11">Diagnostics</sys:String>
-    <sys:String x:Key="UiText297EF4C79B4B">Reduce motion</sys:String>
     <sys:String x:Key="UiText2A35C4A66F81">24-hour time (HH:mm)</sys:String>
     <sys:String x:Key="UiText2AC6695D6165">Next times</sys:String>
     <sys:String x:Key="UiText2B553F349E74">Versioned backups</sys:String>
-    <sys:String x:Key="UiText2B665B0628F4">Stable focus delay (milliseconds, 0–10000)</sys:String>
     <sys:String x:Key="UiText2CFF9BAABF56">Import</sys:String>
-    <sys:String x:Key="UiText2DE27BF28AB8">Brightness step percent</sys:String>
     <sys:String x:Key="UiText3108A87E6BA6">Built With:</sys:String>
     <sys:String x:Key="UiText3334FEE2C77F">Backups</sys:String>
     <sys:String x:Key="UiText33B93476CF59">Time</sys:String>
     <sys:String x:Key="UiText366596141374">Apply preferences</sys:String>
-    <sys:String x:Key="UiText388585CE0C41">Brightness shortcut target</sys:String>
     <sys:String x:Key="UiText3907FA7F8072">Appearance</sys:String>
     <sys:String x:Key="UiText393388597C21">Set as reference</sys:String>
-    <sys:String x:Key="UiText3A491EF495C5">Back up settings</sys:String>
     <sys:String x:Key="UiText3AA42ABD0BFA">Record profile shortcut</sys:String>
-    <sys:String x:Key="UiText3BA2D4C4F924">Decrease brightness shortcut</sys:String>
-    <sys:String x:Key="UiText3BDB3226972F">Favorite monitor</sys:String>
-    <sys:String x:Key="UiText3E75A4C1839B">Use selected monitor for shortcuts</sys:String>
-    <sys:String x:Key="UiText3F35C2F9959E">Remove scheduled time</sys:String>
     <sys:String x:Key="UiText3FA6DFFA2E79">Open diagnostic logs</sys:String>
     <sys:String x:Key="UiText3FE4EACC606B">The close button keeps DisplayFX running in the tray</sys:String>
-    <sys:String x:Key="UiText407D2557BB6F">Gamma value</sys:String>
     <sys:String x:Key="UiText408214DDCA69">Compatibility notes</sys:String>
-    <sys:String x:Key="UiText417E140BD1FE">Pause automation</sys:String>
-    <sys:String x:Key="UiText425EABBDD552">Scheduled brightness percent</sys:String>
     <sys:String x:Key="UiText435DD3E044E9">Read-only capability scan</sys:String>
-    <sys:String x:Key="UiText43CDAAC5881C">Days bitmask (Sun=1…Sat=64)</sys:String>
     <sys:String x:Key="UiText45443A65BBC5">Brightness (%)</sys:String>
     <sys:String x:Key="UiText4C2E1DF4570B">Monitor</sys:String>
-    <sys:String x:Key="UiText4DE0B0E0F8B9">Keep preview</sys:String>
     <sys:String x:Key="UiText4FF2D0D13560">Detect external gamma changes (observe only)</sys:String>
     <sys:String x:Key="UiText506033515391">Rename monitor</sys:String>
     <sys:String x:Key="UiText535E52E4A261">Profiles</sys:String>
@@ -187,36 +226,25 @@
     <sys:String x:Key="UiText556D19D720A5">Export report</sys:String>
     <sys:String x:Key="UiText5608B89A8112">Active profile</sys:String>
     <sys:String x:Key="UiText57F8D47F6AA1">Only advertised DDC/CI commands are listed. Values are monitor-specific; input or power changes can disconnect the display. Power-on may require a physical button when firmware stops listening.</sys:String>
-    <sys:String x:Key="UiText5842E3C991D7">Profile sets</sys:String>
     <sys:String x:Key="UiText58D53E35A641">Brightness shortcuts</sys:String>
     <sys:String x:Key="UiText591889AC42E0">Open logs</sys:String>
-    <sys:String x:Key="UiText5AABCBD14944">Preview (15 seconds)</sys:String>
-    <sys:String x:Key="UiText5C686031A1B8">Marker color (#RRGGBB)</sys:String>
+    <sys:String x:Key="UiText5C686031A1B8">Marker colour (#RRGGBB)</sys:String>
     <sys:String x:Key="UiText5D60EC5A6D70">Pin brightness popup</sys:String>
     <sys:String x:Key="UiText5E5F38D444FA">Daily brightness</sys:String>
     <sys:String x:Key="UiText5E7ECC6DEA56">Record decrease shortcut</sys:String>
     <sys:String x:Key="UiText5FD6B4340091">Choose backup for selective import</sys:String>
     <sys:String x:Key="UiText62FF97AC4C6B">Brightness %</sys:String>
-    <sys:String x:Key="UiText630015CA48F7">Restore settings</sys:String>
     <sys:String x:Key="UiText6340406ECCF3">Link brightness controls</sys:String>
     <sys:String x:Key="UiText647BCA17E7E7">Brightness group</sys:String>
-    <sys:String x:Key="UiText65BDCC9F3BF3">Exact values / reset</sys:String>
     <sys:String x:Key="UiText684635666A4D">Restore a DisplayFX settings backup</sys:String>
-    <sys:String x:Key="UiText6B82A6C312A4">Hold mouse or Space to show original session colors. Release to return.</sys:String>
     <sys:String x:Key="UiText6CFF10FACDAF">Remove selected time</sys:String>
-    <sys:String x:Key="UiText6D72507DE0CE">Create preset</sys:String>
-    <sys:String x:Key="UiText6D80458FD17D">Longitude</sys:String>
-    <sys:String x:Key="UiText6ED6424D45BE">Open main app</sys:String>
     <sys:String x:Key="UiText70544A5C0949">Preview merge</sys:String>
     <sys:String x:Key="UiText71A0273A971A">Copy to monitor</sys:String>
     <sys:String x:Key="UiText72DC3786A6C5">Use hardware name</sys:String>
-    <sys:String x:Key="UiText73F0BD62F953">Previous scheduled times</sys:String>
     <sys:String x:Key="UiText741274D219C5">Startup delay (seconds, 0–120)</sys:String>
-    <sys:String x:Key="UiText74273989B096">Redo</sys:String>
     <sys:String x:Key="UiText74A883A037BC">Settings</sys:String>
     <sys:String x:Key="UiText763A0FBBAEA6">Enable automatic profile switching</sys:String>
     <sys:String x:Key="UiText76CC86794FA9">Reconnect selected display</sys:String>
-    <sys:String x:Key="UiText77A283D69258">Density</sys:String>
     <sys:String x:Key="UiText77C237FE8DBA">Brightness transition (milliseconds, 0–30000)</sys:String>
     <sys:String x:Key="UiText7975300F01BC">Hardware</sys:String>
     <sys:String x:Key="UiText7F135AEDED40">HH:mm</sys:String>
@@ -228,41 +256,27 @@
     <sys:String x:Key="UiText8762CF8CCCA8">Icon (up to 8 characters)</sys:String>
     <sys:String x:Key="UiText87BB59BA2F92">Workspace</sys:String>
     <sys:String x:Key="UiText8877A2B70D7B">Profile shortcut</sys:String>
-    <sys:String x:Key="UiText89611B47026B">Add scheduled time</sys:String>
-    <sys:String x:Key="UiText89F2A5A7EDFD">Optional solar location: enter both latitude and longitude manually. No location service is used.</sys:String>
     <sys:String x:Key="UiText8C0A2AD8BF61">Restore colour profiles</sys:String>
-    <sys:String x:Key="UiText8D4FB8A3D94E">Color brightness</sys:String>
-    <sys:String x:Key="UiText8F299C630EB0">Contrast themes override application colors. Keyboard: Ctrl+S saves, Ctrl+Enter applies, Ctrl+Z/Shift+Ctrl+Z undo/redo color edits. All controls retain standard Tab navigation.</sys:String>
+    <sys:String x:Key="UiText8D4FB8A3D94E">Brightness</sys:String>
+    <sys:String x:Key="UiText8F299C630EB0">Windows contrast themes override application colours.</sys:String>
     <sys:String x:Key="UiText8F3B92601C9D">Previous times</sys:String>
-    <sys:String x:Key="UiText8F6C42AA405D">Brightness shortcut status</sys:String>
     <sys:String x:Key="UiText91D7651553CF">Capture active set</sys:String>
     <sys:String x:Key="UiText932E94F95C9B">Show welcome guide</sys:String>
     <sys:String x:Key="UiText95891F1B3154">Retain snapshots (1–100)</sys:String>
     <sys:String x:Key="UiText997F6AE6B857">Help &amp; About</sys:String>
-    <sys:String x:Key="UiText9BBAA9676DC7">Rule priority</sys:String>
-    <sys:String x:Key="UiText9C602CE01F50">Contrast %</sys:String>
-    <sys:String x:Key="UiText9C61DDAA2FBE">Reapply colors after docking or mode changes</sys:String>
     <sys:String x:Key="UiText9E1EACE9DF84">Restore brightness</sys:String>
     <sys:String x:Key="UiText9EB9496483BE">Back up saved profiles and settings</sys:String>
-    <sys:String x:Key="UiText9F8F14C847C6">Additional application paths (one per line)</sys:String>
     <sys:String x:Key="UiText9FC699129AB1">Settings backup</sys:String>
     <sys:String x:Key="UiTextA0C7F843EC0D">Save monitor settings</sys:String>
     <sys:String x:Key="UiTextA48FA9B18648">Add time</sys:String>
-    <sys:String x:Key="UiTextA4FE65264EF7">Language</sys:String>
     <sys:String x:Key="UiTextA6356CEEB6A8">Save compatibility notes</sys:String>
-    <sys:String x:Key="UiTextA642D7CA2B3C">Power condition</sys:String>
     <sys:String x:Key="UiTextA710C2B90913">Unsaved changes</sys:String>
     <sys:String x:Key="UiTextA76E13B98392">Restore</sys:String>
-    <sys:String x:Key="UiTextA8283ADE3185">Undo</sys:String>
     <sys:String x:Key="UiTextA8AB3D5805C9">Gamma</sys:String>
-    <sys:String x:Key="UiTextA99414434418">Color change diagnostics</sys:String>
-    <sys:String x:Key="UiTextAAE4C94815ED">Profile notes</sys:String>
+    <sys:String x:Key="UiTextA99414434418">Colour change diagnostics</sys:String>
     <sys:String x:Key="UiTextAB16EB25D8FA">Linked application</sys:String>
     <sys:String x:Key="UiTextAC0BA4E76426">Remove time</sys:String>
-    <sys:String x:Key="UiTextAC3EFCCDD707">Link application</sys:String>
-    <sys:String x:Key="UiTextAD17EDDD3EEA">Color brightness percent</sys:String>
-    <sys:String x:Key="UiTextADD201B453F5">Read brightness around color changes to investigate unexpected monitor behavior. No brightness corrections are sent.</sys:String>
-    <sys:String x:Key="UiTextAE9618FE874B">Save brightness settings</sys:String>
+    <sys:String x:Key="UiTextADD201B453F5">Read brightness around colour changes to investigate unexpected monitor behavior. No brightness corrections are sent.</sys:String>
     <sys:String x:Key="UiTextAEFD8B03E35B">Unlink application</sys:String>
     <sys:String x:Key="UiTextAF7DA6054649">Send selected monitor command</sys:String>
     <sys:String x:Key="UiTextB22B0B3873A1">Clear shortcut</sys:String>
@@ -275,14 +289,9 @@
     <sys:String x:Key="UiTextC0426B11152C">Confirm saved display match</sys:String>
     <sys:String x:Key="UiTextC08F645E2276">Apply selected import / restore profile</sys:String>
     <sys:String x:Key="UiTextC5888144A643">AhashR</sys:String>
-    <sys:String x:Key="UiTextC58B6F525F02">Show change notifications</sys:String>
-    <sys:String x:Key="UiTextC75B3AAF6CAF">Full screen only</sys:String>
     <sys:String x:Key="UiTextC7BA65E589B0">Close to tray</sys:String>
     <sys:String x:Key="UiTextC910D474DCD7">General</sys:String>
     <sys:String x:Key="UiTextCC0E83CFFC63">Decrease brightness</sys:String>
-    <sys:String x:Key="UiTextCCA9C0469F8B">Adjusts the GPU color curve. Physical backlight brightness is controlled separately from the tray.</sys:String>
-    <sys:String x:Key="UiTextCD6C9851E91A">Open release page</sys:String>
-    <sys:String x:Key="UiTextCDC562D6AE15">Hold to compare</sys:String>
     <sys:String x:Key="UiTextD0F314D90DD8">Prepare portable mode (restart required)</sys:String>
     <sys:String x:Key="UiTextD28CEE938975">Refresh displays</sys:String>
     <sys:String x:Key="UiTextD2ECE6FCD836">Apply set</sys:String>
@@ -290,60 +299,34 @@
     <sys:String x:Key="UiTextD46FA4EC9615">Increase brightness</sys:String>
     <sys:String x:Key="UiTextD4A19E7F80B6">DisplayFX</sys:String>
     <sys:String x:Key="UiTextD4B5A6928E18">Also import application preferences</sys:String>
-    <sys:String x:Key="UiTextD4FC42307306">Update channel</sys:String>
     <sys:String x:Key="UiTextD5E2BA51BF04">Identify displays</sys:String>
-    <sys:String x:Key="UiTextD642927CEBF6">Pause / resume until restart</sys:String>
     <sys:String x:Key="UiTextD696A35BDD18">Profile</sys:String>
     <sys:String x:Key="UiTextD6FDD7B5CCD1">Open DisplayFX</sys:String>
     <sys:String x:Key="UiTextD909750B1BBB">Automation</sys:String>
     <sys:String x:Key="UiTextDAEE7606B339">Reset</sys:String>
     <sys:String x:Key="UiTextDD333E390009">DisplayFX Workspace</sys:String>
-    <sys:String x:Key="UiTextE15F143CCF6F">Fixed / Sunrise / Sunset</sys:String>
-    <sys:String x:Key="UiTextE2B1C6BD2ACC">Increase brightness shortcut</sys:String>
     <sys:String x:Key="UiTextE46497AF214F">Launch with Windows</sys:String>
     <sys:String x:Key="UiTextE75696D5EA78">Save brightness shortcuts and schedule</sys:String>
     <sys:String x:Key="UiTextE9B6C74CD365">Local time; after sleep, the latest due level is applied</sys:String>
-    <sys:String x:Key="UiTextEA713ECD8537">Favorite</sys:String>
+    <sys:String x:Key="UiTextEA713ECD8537">Favourite</sys:String>
     <sys:String x:Key="UiTextEC811D30A89C">Brightness</sys:String>
-    <sys:String x:Key="UiTextEDA00DF0A060">Apply profile</sys:String>
     <sys:String x:Key="UiTextEEFF55D84B82">Compare selected backup</sys:String>
     <sys:String x:Key="UiTextEFB52E7172B7">Theme</sys:String>
-    <sys:String x:Key="UiTextF1BB69715A57">Apply profile / preview edits</sys:String>
+    <sys:String x:Key="UiTextF1BB69715A57">Apply profile colours</sys:String>
     <sys:String x:Key="UiTextF223B149EB6C">Show hardware details</sys:String>
     <sys:String x:Key="UiTextF26F3275E735">Check for updates</sys:String>
-    <sys:String x:Key="UiTextF2F82EB58EA6">Import profile colors</sys:String>
+    <sys:String x:Key="UiTextF2F82EB58EA6">Import profile colours</sys:String>
     <sys:String x:Key="UiTextF2FB945958AB">Turn off displays</sys:String>
-    <sys:String x:Key="UiTextF37DEB7771E6">Search profiles</sys:String>
-    <sys:String x:Key="UiTextF61AA62D87C4">Restore original colors</sys:String>
     <sys:String x:Key="UiTextF650DF8F0B13">Show action labels</sys:String>
-    <sys:String x:Key="UiTextF657ED08C403">Cancel preview</sys:String>
     <sys:String x:Key="UiTextF6AD43CC37AB">Read-only self-test</sys:String>
-    <sys:String x:Key="UiTextF902E4AFA823">Accent (#RRGGBB)</sys:String>
-    <sys:String x:Key="UiTextFA2EDEC8107E">Brightness automation status</sys:String>
     <sys:String x:Key="UiTextFAFC1914712F">Record increase shortcut</sys:String>
     <sys:String x:Key="UiTextFB31CF5AD5E2">Right-click to give this monitor a custom name.</sys:String>
     <sys:String x:Key="UiTextFCF4F3F4D5F7">New profile</sys:String>
     <sys:String x:Key="UiTextFD3B0734260A">Include device paths in report</sys:String>
-    <sys:String x:Key="UiText0860A2E7673E">Pause until time</sys:String>
-    <sys:String x:Key="UiText1DC3F78BF078">Red gain</sys:String>
-    <sys:String x:Key="UiText223E1A72CF76">Resume at local time (HH:mm)</sys:String>
-    <sys:String x:Key="UiText3A16DF3FCCDB">Blue gain</sys:String>
-    <sys:String x:Key="UiText4830935B6341">Color transition (milliseconds, 0–5000)</sys:String>
-    <sys:String x:Key="UiText58339F45DF96">Wed</sys:String>
-    <sys:String x:Key="UiText66DAB40CEA1D">Fri</sys:String>
-    <sys:String x:Key="UiText67FF526ED5E9">Time source</sys:String>
+    <sys:String x:Key="UiText4830935B6341">Colour transition (milliseconds, 0–5000)</sys:String>
     <sys:String x:Key="UiText766D558175C9">Prepare per-user mode (restart required)</sys:String>
-    <sys:String x:Key="UiText7DA11212ED34">Thu</sys:String>
-    <sys:String x:Key="UiText87620FE94C6C">Approximate temperature tint</sys:String>
-    <sys:String x:Key="UiText89D76FDE8BCD">Green gain</sys:String>
-    <sys:String x:Key="UiTextAF77ECA71660">Per-channel GPU curves; temperature is an approximate tint, not a calibrated white point. Unavailable in HDR/advanced color mode.</sys:String>
     <sys:String x:Key="UiTextCC193568DCA4">Reference profile</sys:String>
-    <sys:String x:Key="UiTextD1EB39B09BF5">Tue</sys:String>
-    <sys:String x:Key="UiTextDB18F17FE532">Sun</sys:String>
-    <sys:String x:Key="UiTextE82E66F5EC15">RGB / temperature tint</sys:String>
     <sys:String x:Key="UiTextE9AE2114CA7C">Brightness popup order</sys:String>
     <sys:String x:Key="UiTextF32160D31EE7">Text scale (100–200%)</sys:String>
-    <sys:String x:Key="UiTextF40D7F51F69E">Mon</sys:String>
-    <sys:String x:Key="UiTextFDEB71B569E0">Sat</sys:String>
     <sys:String x:Key="UiText269829109ADB">Input and power commands can disconnect this display. To restore it, use the monitor's physical input selector or power button; software power-on may be unavailable.</sys:String>
     <sys:String x:Key="UiText74640D8B16CE">Saved profile → selected backup</sys:String></ResourceDictionary>

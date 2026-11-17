@@ -12,58 +12,50 @@ namespace DisplayFX.Global.Controllers;
 public class DataController
 {
     private readonly object _sync = new();
-    private readonly string _legacyDataPath;
-    private DateTime _lastSnapshot;
-    private bool _formatChecked;
 
+    private readonly string[] _legacyDataPaths;
     public DataController() : this(
-        File.Exists(Path.Combine(AppContext.BaseDirectory, "portable.flag")) ? Path.Combine(AppContext.BaseDirectory, "Data") : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DisplayFX"),
+        ResolveWorkingDirectory(),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DisplayFX", "Data.json"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DisplayFX", "Data.json.bak"),
         Path.Combine(AppContext.BaseDirectory, "Data", "Data.json"))
     {
     }
 
-    public DataController(string dataDirectory, string legacyDataPath)
+    public DataController(string dataDirectory, params string[] legacyDataPaths)
     {
         DataPath = Path.Combine(dataDirectory, "Data.json");
-        _legacyDataPath = legacyDataPath;
+        _legacyDataPaths = legacyDataPaths.Where(path => !string.Equals(Path.GetFullPath(path), Path.GetFullPath(DataPath), StringComparison.OrdinalIgnoreCase)).ToArray();
+    }
+
+    private static string ResolveWorkingDirectory()
+    {
+        var legacyData = Path.Combine(AppContext.BaseDirectory, "Data");
+        var installData = File.Exists(Path.Combine(AppContext.BaseDirectory, "portable.flag"))
+            ? legacyData : Path.Combine(AppContext.BaseDirectory, "Settings");
+        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        var userData = string.IsNullOrWhiteSpace(documents)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "DisplayFX")
+            : Path.Combine(documents, "DisplayFX");
+        if (File.Exists(Path.Combine(userData, "Data.json"))) return userData;
+        try
+        {
+            Directory.CreateDirectory(installData);
+            var probe = Path.Combine(installData, Guid.NewGuid().ToString("N") + ".tmp");
+            using (File.Create(probe, 1, FileOptions.DeleteOnClose)) { }
+            return installData;
+        }
+        catch (UnauthorizedAccessException) { return userData; }
+        catch (IOException) { return userData; }
     }
 
     public string DataPath { get; }
-    public string BackupPath => DataPath + ".bak";
-    public string SnapshotDirectory => Path.Combine(Path.GetDirectoryName(DataPath)!, "History");
-    public string[] GetSnapshots() => Directory.Exists(SnapshotDirectory) ? Directory.GetFiles(SnapshotDirectory, "*.json").OrderByDescending(path => path, StringComparer.Ordinal).ToArray() : Array.Empty<string>();
-    public Computer ReadSnapshot(string path)
-    {
-        var fullPath = Path.GetFullPath(path);
-        if (!string.Equals(Path.GetDirectoryName(fullPath), Path.GetFullPath(SnapshotDirectory), StringComparison.OrdinalIgnoreCase) || Path.GetExtension(fullPath) != ".json")
-            throw new InvalidDataException("Select a DisplayFX history snapshot.");
-        return Read(fullPath);
-    }
-    public string CreateSnapshot(Computer computer)
-    {
-        lock (_sync)
-        {
-            ProfileTransferController.ValidateStoredComputer(computer);
-            Directory.CreateDirectory(SnapshotDirectory);
-            var path = Path.Combine(SnapshotDirectory, DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + ".json");
-            File.WriteAllText(path, JsonConvert.SerializeObject(computer), new UTF8Encoding(false));
-            PruneSnapshots(computer.Features.BackupRetention);
-            _lastSnapshot = DateTime.UtcNow;
-            return path;
-        }
-    }
-    private void PruneSnapshots(int retention)
-    {
-        foreach (var path in GetSnapshots().Where(path => !Path.GetFileName(path).StartsWith("upgrade-before-", StringComparison.Ordinal)).Skip(Math.Clamp(retention, 1, 100))) File.Delete(path);
-    }
-
-    public bool HasSavedData => File.Exists(DataPath) || File.Exists(BackupPath) ||
-        (File.Exists(_legacyDataPath) && new FileInfo(_legacyDataPath).Length > 0);
+    public bool HasSavedData => File.Exists(DataPath) || _legacyDataPaths.Any(path => File.Exists(path) && new FileInfo(path).Length > 0);
 
     public void Write(Computer data)
     {
         lock (_sync)
-            WriteAtomically(data, true);
+            WriteAtomically(data);
     }
 
     public Result<Computer> Load()
@@ -73,37 +65,19 @@ public class DataController
             try
             {
                 if (File.Exists(DataPath))
-                {
-                    try
-                    {
-                        return Result.Ok(Read(DataPath));
-                    }
-                    catch (Exception ex) when (ex is JsonException || ex is InvalidDataException)
-                    {
-                        if (!File.Exists(BackupPath))
-                            throw;
+                    return Result.Ok(Read(DataPath));
 
-                        var recovered = Read(BackupPath);
-                        File.Copy(DataPath, DataPath + ".corrupt-" + Guid.NewGuid().ToString("N"));
-                        WriteAtomically(recovered, false);
-                        return Result.Ok(recovered);
-                    }
-                }
-
-                if (File.Exists(BackupPath))
+                Exception? legacyError = null;
+                foreach (var legacyPath in _legacyDataPaths.Where(path => File.Exists(path) && new FileInfo(path).Length > 0))
                 {
-                    var recovered = Read(BackupPath);
-                    WriteAtomically(recovered, false);
-                    return Result.Ok(recovered);
-                }
-
-                // The shipped legacy template is empty; only import actual saved settings.
-                if (File.Exists(_legacyDataPath) && new FileInfo(_legacyDataPath).Length > 0)
-                {
-                    var migrated = Read(_legacyDataPath);
-                    WriteAtomically(migrated, true);
+                    Computer migrated;
+                    try { migrated = Read(legacyPath); }
+                    catch (Exception ex) when (ex is JsonException or InvalidDataException)
+                    { legacyError = ex; continue; }
+                    WriteAtomically(migrated);
                     return Result.Ok(migrated);
                 }
+                if (legacyError != null) throw legacyError;
 
                 return Result.Fail(new Error("No saved settings were found."));
             }
@@ -120,6 +94,8 @@ public class DataController
         using var reader = new JsonTextReader(new StringReader(File.ReadAllText(path))) { MaxDepth = 64 };
         var document = JObject.Load(reader, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
         if (reader.Read()) throw new InvalidDataException("Settings contain trailing data.");
+        foreach (var key in new[] { "BrightnessSchedules", "IsBrightnessScheduleEnabled", "IsColorDiagnosticsEnabled" })
+            document.Property(key, StringComparison.OrdinalIgnoreCase)?.Remove();
         var computer = document.ToObject<Computer>();
         if (computer?.Monitors == null)
             throw new InvalidDataException("Settings contain no computer or monitor list.");
@@ -152,7 +128,7 @@ public class DataController
         return computer;
     }
 
-    private void WriteAtomically(Computer data, bool keepBackup)
+    private void WriteAtomically(Computer data)
     {
         var json = JsonConvert.SerializeObject(data, new JsonSerializerSettings
         {
@@ -160,30 +136,6 @@ public class DataController
         });
         if (Encoding.UTF8.GetByteCount(json) > 5 * 1024 * 1024) throw new InvalidDataException("Settings exceed the supported 5 MB size. Shorten notes or remove unused profiles before saving.");
         Directory.CreateDirectory(Path.GetDirectoryName(DataPath)!);
-        var formatSource = keepBackup && File.Exists(DataPath) ? DataPath : File.Exists(BackupPath) ? BackupPath : null;
-        if (!_formatChecked && formatSource != null)
-        {
-            JObject? previous = null;
-            try { previous = JObject.Parse(File.ReadAllText(formatSource)); } catch (JsonException) { }
-            if (previous != null && previous["DataFormatVersion"]?.ToString() != "2")
-            {
-                Directory.CreateDirectory(SnapshotDirectory);
-                var protectedBackup = Path.Combine(SnapshotDirectory, "upgrade-before-format-2.json");
-                if (!File.Exists(protectedBackup)) File.Copy(formatSource, protectedBackup);
-            }
-        }
-        _formatChecked = true;
-        if (keepBackup && data.Features.VersionedBackups && File.Exists(DataPath) && DateTime.UtcNow - _lastSnapshot >= TimeSpan.FromMinutes(1))
-        {
-            try
-            {
-                Directory.CreateDirectory(SnapshotDirectory);
-                File.Copy(DataPath, Path.Combine(SnapshotDirectory, DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + ".json"));
-                PruneSnapshots(data.Features.BackupRetention);
-                _lastSnapshot = DateTime.UtcNow;
-            }
-            catch (Exception ex) { NLog.LogManager.GetCurrentClassLogger().Warn(ex, "Could not create an automatic settings snapshot; primary atomic save will continue."); }
-        }
         var temporaryPath = DataPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
@@ -196,7 +148,7 @@ public class DataController
             }
 
             if (File.Exists(DataPath))
-                File.Replace(temporaryPath, DataPath, keepBackup ? BackupPath : null);
+                File.Replace(temporaryPath, DataPath, null);
             else
                 File.Move(temporaryPath, DataPath);
         }

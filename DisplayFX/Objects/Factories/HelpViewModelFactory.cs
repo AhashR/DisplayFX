@@ -12,23 +12,21 @@ public class HelpViewModelFactory : IHelpViewModelFactory
     private readonly RegistryController _registryController;
     private readonly BrightnessPersistenceController _brightnessPersistenceController;
     private readonly ILogger _logger;
-    private readonly BrightnessAutomationController _automation;
 
     public HelpViewModelFactory(DataController dataController, ComputerFactory computerFactory,
         RegistryController registryController, BrightnessPersistenceController brightnessPersistenceController,
-        ILogger logger, BrightnessAutomationController automation)
+        ILogger logger)
     {
         _dataController = dataController;
         _computerFactory = computerFactory;
         _registryController = registryController;
         _brightnessPersistenceController = brightnessPersistenceController;
         _logger = logger;
-        _automation = automation;
     }
 
     public HelpViewModel Create()
     {
         return new HelpViewModel(_dataController, _computerFactory, _registryController,
-            _brightnessPersistenceController, _logger, _automation);
+            _brightnessPersistenceController, _logger);
     }
 }

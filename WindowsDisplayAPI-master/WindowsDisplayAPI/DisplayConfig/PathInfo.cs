@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -727,7 +727,16 @@ namespace WindowsDisplayAPI.DisplayConfig
             return displayConfigPathInfos.ToArray();
         }
 
-        private static PathInfo[] GetPathInfos(QueryDeviceConfigFlags flags, out DisplayConfigTopologyId topologyId)
+        public static string[] GetActiveGdiSourceNamesInPathOrder()
+        {
+            GetPathInfos(QueryDeviceConfigFlags.OnlyActivePaths | QueryDeviceConfigFlags.VirtualModeAware, out _, out var names);
+            return names;
+        }
+
+        private static PathInfo[] GetPathInfos(QueryDeviceConfigFlags flags, out DisplayConfigTopologyId topologyId) =>
+            GetPathInfos(flags, out topologyId, out _, false);
+
+        private static PathInfo[] GetPathInfos(QueryDeviceConfigFlags flags, out DisplayConfigTopologyId topologyId, out string[] orderedNames, bool namesOnly = true)
         {
             DisplayConfigPathInfo[] displayPaths;
             DisplayConfigModeInfo[] displayModes;
@@ -781,6 +790,14 @@ namespace WindowsDisplayAPI.DisplayConfig
                     throw new Win32Exception((int) error);
                 }
             }
+
+            orderedNames = namesOnly ? displayPaths.Take((int)pathCount)
+                .Select(path =>
+                {
+                    try { return new PathDisplaySource(new PathDisplayAdapter(path.SourceInfo.AdapterId), path.SourceInfo.SourceId).DisplayName; }
+                    catch (Win32Exception) { return string.Empty; }
+                }).ToArray() : new string[0];
+            if (namesOnly) return new PathInfo[0];
 
             var pathInfos =
                 new Dictionary<

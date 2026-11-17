@@ -8,7 +8,7 @@ namespace DisplayFX.Global.Controllers;
 
 public static class LoggingController
 {
-    public static string LogDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DisplayFX", "Logs");
+    public static string LogDirectory => Path.Combine(AppContext.BaseDirectory, "Logs");
 
     public static void Configure(string? directory = null)
     {

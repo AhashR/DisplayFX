@@ -4,22 +4,21 @@
 
 DisplayFX manages per-monitor color profiles and physical backlight brightness on Windows. Gamma-ramp brightness, contrast and gamma work with compatible display drivers; NVIDIA Digital Vibrance requires an NVIDIA GPU. External physical brightness requires DDC/CI; compatible internal laptop panels use a separate WMI route.
 
-This checkout is **2.2.0-preview.1**. Open **Workspace / Beheer** from the top toolbar for appearance, profile metadata, automation, hardware, diagnostics, backups and update preferences. The [80-feature implementation matrix](docs/feature-implementation-status.md) records actual availability and remaining limitations. This local preview is unsigned. Extra AMD/Intel saturation backends are not implemented, and hardware-dependent write paths still need physical qualification. Some technical messages remain English.
+This checkout is **2.2.14**. Use Settings to import or export a profile, check for updates, or view the version. Right-click a profile for its icon and other profile actions. The [implementation matrix](docs/feature-implementation-status.md) maps the original proposals to this build. Local builds may be unsigned. Extra AMD/Intel saturation backends are not implemented, and hardware-dependent write paths still need physical qualification.
 
-New editing tools include exact numeric input and individual resets, up to 100 undo steps, RGB gain/approximate temperature tint, 15-second keep/cancel previews, hold-to-compare and session-original restoration. Preview confirmation retains the visible colors; **Save** stores edited values. Appearance supports light/dark/system themes, accent, density, language and 100–200% text scale. Ctrl+S saves, Ctrl+Enter applies, Ctrl+Z and Ctrl+Shift+Z undo/redo color edits.
+The editor uses sliders for brightness, contrast, vibrance and gamma. Revert discards draft changes, Apply changes the visible colors, and Save stores the edited values. Detailed status stays in the status icon tooltip. Click a value beside a slider to type it exactly. Press Enter to accept or Esc to cancel. The interface is in English.
 
 ## Using the app
 
-- Select a monitor tab, then a profile. Create up to 100 profiles per monitor with **+** or import a profile's colors with the import icon. Imported colors receive a unique name without reserving shortcuts or application links. Right-click a profile to favorite, reorder, duplicate, rename, export or remove it. Search filters names, monitors and application links.
-- Adjust brightness, contrast, vibrance and gamma. The **play** icon applies a profile or previews edits, **undo** reverts edits, and **save** stores the draft. Profile shortcuts and executable links are optional; all edits remain isolated until saved. Use **Link application** to choose an executable. Its profile applies while that app is in the foreground, then the previously active profile returns when you leave it.
+- Select a monitor tab, then a profile. Create up to 100 profiles per monitor with **+** or import a single profile from the main window’s menu. Imported colors receive a unique name without reserving shortcuts or application links. Right-click a profile to mark it as a favorite, reorder, duplicate, rename, export or remove it. Favorites are profile metadata and do not change the order.
+- Adjust brightness, contrast, vibrance and gamma. The **play** icon applies the current colors, **undo** reverts edits, and **save** stores the draft. Profile shortcuts and executable links are optional; all edits remain isolated until saved. Use **Link application** to choose an executable. Its profile applies while that app is in the foreground, then the previously active profile returns when you leave it.
 - Color brightness adjusts the GPU gamma ramp. Profiles never send physical brightness commands. Profile application runs in the background; failed automatic updates show nonmodal feedback and retry after 30 seconds. A display-mode change or reconnect invalidates the previous application and reapplies the intended colors.
-- The toolbar provides **identify displays**, **refresh**, **settings** and **Workspace**. Hover an icon for its label. Settings contains complete backup and restore; Workspace adds selective import, preview and versioned snapshots. Restore merges profiles while retaining existing monitor identity, labels and remembered brightness; imports exceeding 100 profiles on one monitor fail without changing settings.
+- The toolbar provides **identify displays**, **refresh**, **settings** and **Workspace**. Hover an icon for its label. The main window’s menu imports or exports one profile at a time to a path you choose.
 - Right-click a monitor tab to rename it. Disconnected displays retain profiles, and drafts survive reconnection during the same session. When a valid, unique EDID serial is available, profiles also follow the same panel across changed ports/docks. Ambiguous identities are never guessed.
 - Left-click the tray icon for brightness sliders. The **link** icon links their levels, **open app** opens the main DisplayFX screen, **power** turns displays off, and **gear** opens settings. Normal rows show only the monitor name, percentage and slider; errors appear as a small warning with details in its tooltip.
 - Brightness writes run outside the UI thread and coalesce rapid input to the latest requested value. Requests to one monitor are serialized and use its working API and cached range. Transient failed writes get one automatic retry. Closing the popup flushes pending input, and only successful writes are remembered. A sleeping or temporarily unreadable monitor keeps its last known level. Controls reconnect automatically after wake; a completely unknown level displays a dash instead of an invented 50%.
-- The main app and Settings use the standard Windows title bar: drag the title bar to move either window. Settings scrolls when the work area is small; daily-time lists use small pages without losing invalid draft input. Optionally enable brightness shortcuts, set their step, and add daily `HH:mm` times and brightness levels. Save these controls with the save icon inside that section. Startup and tray preferences save immediately. Default shortcuts are Ctrl+Alt+Page Up / Page Down with a 10% step; shortcuts and schedules are off initially. After sleep, only the latest due scheduled level applies. Failed/missing outputs get bounded retries, which do not override newer explicit brightness changes.
+- Settings contains startup and tray preferences and optional global brightness shortcuts.
 - Shortcut and application-link conflicts appear beside the controls. Shortcuts are temporarily released while recording. Old executable links remain readable; transient app-switch state restores the manual profile on startup. Settings restore warns before discarding unsaved profile drafts and reconciles the resulting active colors.
-- Settings provides **Open diagnostic logs** for bounded rotating files in `%LOCALAPPDATA%\DisplayFX\Logs`. Opt-in **Color change diagnostics** observes physical brightness before and after color application, including delayed changes, without sending corrections. Use this to investigate monitor dynamic contrast/HDR, driver resets, or competing brightness tools. Independent brightness is disabled for ambiguous cloned physical outputs.
 
 ## Requirements
 
@@ -62,7 +61,7 @@ dotnet run --project DisplayFX\DisplayFX.csproj -c Release --no-build
 
 Before releasing, verify physical DDC/CI commands, GPU color updates, global shortcuts, screen overlays and docking/undocking on supported hardware.
 
-The [15 November 2026 app audit](docs/app-audit-2026-11-15.md) records the additional recovery, in-flight profile deletion, import feedback and diagnostics checks. The [feature implementation matrix](docs/feature-implementation-status.md) maps the [original 80 proposals](docs/feature-backlog-nl.md) to this preview. See [hardware qualification](docs/hardware-test-matrix.md) before claiming support for an untested configuration.
+The [15 November 2026 app audit](docs/app-audit-2026-11-15.md) records the additional recovery, in-flight profile deletion, import feedback and diagnostics checks. The [feature implementation matrix](docs/feature-implementation-status.md) maps the [original 80 proposals](docs/feature-backlog-nl.md) to this build. See [hardware qualification](docs/hardware-test-matrix.md) before claiming support for an untested configuration.
 
 Windows CI runs the regression suite on pushes and pull requests. A main-branch version change triggers the release workflow, which tests, builds the installer with a signature-verified compiler, verifies uploaded checksums, and publishes the release. Published versions are never overwritten. See [the 2.1.2 review resolution](docs/audit-resolution-2.1.2.md).
 
@@ -91,17 +90,11 @@ The installer includes `DisplayFX.Cli.exe`. While DisplayFX is running in the sa
 
 The bounded local pipe accepts only listing and profile-ID activation, and is restricted to the current Windows user/session. Profile activation is unavailable while a settings dialog is open.
 
-Signing preparation uses an existing certificate in the Windows certificate store, with a code-signing EKU and accessible private key. Pass `-SigningCertificateThumbprint <thumbprint> -RequireSignature` to the installer script. No private key or password belongs in source control. Local previews can be built unsigned; stable publication requires valid Authenticode and actual hardware qualification evidence. Building locally does not publish a release.
+Signing preparation uses an existing certificate in the Windows certificate store, with a code-signing EKU and accessible private key. Pass `-SigningCertificateThumbprint <thumbprint> -RequireSignature` to the installer script. No private key or password belongs in source control. Local builds can be unsigned. Publication requires valid Authenticode and actual hardware qualification evidence. Building locally does not publish a release.
 
-## Settings and recovery
+## Local settings
 
-Settings live at `%LOCALAPPDATA%\DisplayFX\Data.json`. Saves are atomic and keep the previous save as `Data.json.bak`. A corrupt save with a valid backup is preserved as `Data.json.corrupt-<id>` before recovery. If neither file is readable, startup reports the error and preserves the files.
-
-Optional rotating snapshots live in `History`. Before upgrading to data format 2, an existing configuration is preserved as `History/upgrade-before-format-2.json`, excluded from snapshot retention. Exports use version 2 and accept version-1 imports. For downgrade instructions, see the [preview release notes](docs/releases/2.2.0-preview.1.md). Workspace can prepare portable app-local storage using `portable.flag`; changing storage mode requires a restart and protects existing destination settings.
-
-The first launch imports a nonempty `<AppDirectory>\Data\Data.json` when no per-user save exists, leaving the legacy file intact. Newly detected monitors receive a default profile.
-
-App autostart uses `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\DisplayFX`. A session-local mutex prevents duplicate instances.
+DisplayFX stores its working data in Settings/Data.json alongside the application when writable, or in your Documents folder. Saves are atomic. If that file is missing on upgrade, the app reads its previous AppData settings and migrates them without changing the original files. It does not create automatic backups or diagnostic files. Export each profile manually from the main window if you want a separate copy.
 
 ## Repository
 

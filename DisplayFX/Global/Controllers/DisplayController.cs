@@ -12,7 +12,6 @@ public class DisplayController
 {
     private readonly ILogger _logger;
     private readonly DisplayWindowManager _windowManager;
-    private readonly Dictionary<string, ColorSnapshot> _originalColors = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DisplayGammaRamp> _lastAppliedColors = new(StringComparer.OrdinalIgnoreCase);
     public sealed record ColorSnapshot(DisplayGammaRamp Ramp, double? Vibrance);
     public virtual ColorSnapshot CaptureColors(Display display, NvAPIWrapper.Display.Display? nvidia) =>
@@ -32,11 +31,6 @@ public class DisplayController
             return true;
         }
         catch (Exception ex) { LastError = "Could not restore colors. " + ex.Message; _logger.Warn(ex, LastError); return false; }
-    }
-    public virtual bool RestoreOriginalColors(Display display, NvAPIWrapper.Display.Display? nvidia)
-    {
-        if (_originalColors.TryGetValue(display.DevicePath, out var snapshot)) return RestoreColors(display, nvidia, snapshot);
-        LastError = "No original color snapshot exists for this display in the current session."; return false;
     }
     public virtual bool? HasExternalColorChange(Display display)
     {
@@ -62,7 +56,6 @@ public class DisplayController
             if (nvidia == null && settings.DigitalVibrance != .5) throw new InvalidOperationException("NVIDIA Digital Vibrance is unavailable.");
             if (DisplayCapabilitiesController.IsAdvancedColorEnabled(display) == true) throw new InvalidOperationException("HDR/advanced color is active. Standard gamma transitions are unavailable.");
             initial = CaptureColors(display, nvidia);
-            _originalColors.TryAdd(display.DevicePath, initial);
             var target = CreateRamp(settings);
             var milliseconds = Math.Clamp(duration, 1, 5000);
             var steps = Math.Clamp(milliseconds / 100, 1, 20);
@@ -119,11 +112,6 @@ public class DisplayController
             if (nvidiaMonitor != null && previousRamp == null)
                 throw new InvalidOperationException("The previous color settings could not be read. No color changes were applied.");
             var previousVibrance = nvidiaMonitor?.DigitalVibranceControl.NormalizedLevel;
-            if (!_originalColors.ContainsKey(display.DevicePath))
-            {
-                var original = previousRamp ?? display.GammaRamp;
-                if (original != null) _originalColors[display.DevicePath] = new(original, previousVibrance);
-            }
             _logger.Info("Applying GPU color settings for {0}: brightness={1}, contrast={2}, gamma={3}, vibrance={4}. No physical brightness commands.",
                 display.DevicePath, profileSetting.Brightness, profileSetting.Contrast, profileSetting.Gamma, profileSetting.DigitalVibrance);
             ApplyWithRollback(
@@ -148,14 +136,7 @@ public class DisplayController
         }
     }
 
-    internal static DisplayGammaRamp CreateRamp(ProfileSetting settings)
-    {
-        var ramp = new DisplayGammaRamp(settings.Brightness, settings.Contrast, settings.Gamma);
-        var warm = Math.Min(1, settings.TemperatureKelvin / 6500d);
-        var cool = Math.Min(1, 6500d / settings.TemperatureKelvin);
-        ushort[] Scale(ushort[] curve, double gain) => curve.Select(value => (ushort)Math.Clamp(Math.Round(value * gain), 0, ushort.MaxValue)).ToArray();
-        return new DisplayGammaRamp(Scale(ramp.Red, settings.RedGain * cool), Scale(ramp.Green, settings.GreenGain * Math.Sqrt(warm * cool)), Scale(ramp.Blue, settings.BlueGain * warm));
-    }
+    internal static DisplayGammaRamp CreateRamp(ProfileSetting settings) => new(settings.Brightness, settings.Contrast, settings.Gamma);
 
     internal static void ApplyWithRollback(Action applyGamma, Action? applyVibrance,
         Action? restoreGamma, Action? restoreVibrance)

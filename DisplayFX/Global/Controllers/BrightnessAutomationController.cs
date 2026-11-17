@@ -12,7 +12,7 @@ using WindowsDisplayAPI;
 
 namespace DisplayFX.Global.Controllers;
 
-/// <summary>Opt-in global brightness shortcuts and daily local-time schedules.</summary>
+/// <summary>Opt-in global brightness shortcuts.</summary>
 public class BrightnessAutomationController : IDisposable
 {
     private const string IncreaseHotkeyId = "DisplayFX.Brightness.Increase";
@@ -21,20 +21,15 @@ public class BrightnessAutomationController : IDisposable
     private readonly MonitorBrightnessController _brightnessController;
     private readonly BrightnessPersistenceController _persistence;
     private readonly ILogger _logger;
-    private DispatcherTimer? _timer;
     private Computer? _computer;
     private bool _started;
     private bool _hotkeysSuspended;
-    private DateTime _lastScheduleCheck;
     private readonly Dispatcher _dispatcher;
     private readonly LinkedList<AutomationRequest> _pendingRequests = new();
     private Task _worker = Task.CompletedTask;
     private bool _processingRequests;
     private int _operationVersion;
-    private sealed record AutomationRequest(long? Delta, int? Brightness, string Source, DateTime? ScheduleSince = null,
-        string? OnlyDevicePath = null, long? ExpectedVersion = null, int RetryAttempt = 0);
-    private sealed record ScheduleRetry(AutomationRequest Request, long Version, DateTime Due);
-    private readonly Dictionary<string, ScheduleRetry> _scheduleRetries = new(StringComparer.OrdinalIgnoreCase);
+    private sealed record AutomationRequest(long Delta);
 
     public BrightnessAutomationController(DisplayCache displayCache, MonitorBrightnessController brightnessController,
         BrightnessPersistenceController persistence, ILogger logger)
@@ -70,28 +65,14 @@ public class BrightnessAutomationController : IDisposable
         if (_started || _computer is null)
             return;
         _started = true;
-        _lastScheduleCheck = LocalNow;
-        _brightnessController.DisplayPowerChanged += OnDisplayPowerChanged;
-        _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(15) };
-        _timer.Tick += OnTimerTick;
-        _timer.Start();
-        UpdateScheduleStatus();
         RefreshHotkeys();
     }
 
     public void Stop()
     {
         _started = false;
-        _brightnessController.DisplayPowerChanged -= OnDisplayPowerChanged;
         Interlocked.Increment(ref _operationVersion);
         _pendingRequests.Clear();
-        _scheduleRetries.Clear();
-        if (_timer is not null)
-        {
-            _timer.Stop();
-            _timer.Tick -= OnTimerTick;
-            _timer = null;
-        }
         RemoveHotkeys();
     }
 
@@ -106,13 +87,9 @@ public class BrightnessAutomationController : IDisposable
 
     public void SettingsChanged()
     {
-        // Starting/enabling or editing a schedule never applies a past occurrence.
-        _lastScheduleCheck = LocalNow;
         Interlocked.Increment(ref _operationVersion);
         _pendingRequests.Clear();
-        _scheduleRetries.Clear();
         ShortcutError = null;
-        UpdateScheduleStatus();
         RefreshHotkeys();
     }
 
@@ -224,30 +201,16 @@ public class BrightnessAutomationController : IDisposable
             return _dispatcher.InvokeAsync(() => AdjustBrightnessAsync(delta)).Task.Unwrap();
         if (_computer is null || delta == 0)
             return Task.CompletedTask;
-        return Enqueue(new AutomationRequest(delta, null, "Brightness shortcut"));
+        return Enqueue(new AutomationRequest(delta));
     }
 
     private Task Enqueue(AutomationRequest request)
     {
         // Combine repeated steps in one direction while preserving reversal/clamping order.
-        if (request.Delta.HasValue && _pendingRequests.Last?.Value is { Delta: not null } last &&
-            Math.Sign(last.Delta.Value) == Math.Sign(request.Delta.Value))
-            _pendingRequests.Last.Value = last with { Delta = Math.Clamp(last.Delta.Value + request.Delta.Value, -100, 100) };
+        if (_pendingRequests.Last is { } last && Math.Sign(last.Value.Delta) == Math.Sign(request.Delta))
+            last.Value = new AutomationRequest(Math.Clamp(last.Value.Delta + request.Delta, -100, 100));
         else
-        {
-            if (request.ScheduleSince.HasValue)
-            {
-                // A slow monitor should receive only the newest queued daily level.
-                for (var node = _pendingRequests.First; node != null;)
-                {
-                    var next = node.Next;
-                    if (node.Value.ScheduleSince.HasValue && (request.OnlyDevicePath == null ||
-                        string.Equals(request.OnlyDevicePath, node.Value.OnlyDevicePath, StringComparison.OrdinalIgnoreCase))) _pendingRequests.Remove(node);
-                    node = next;
-                }
-            }
             _pendingRequests.AddLast(request);
-        }
         if (!_processingRequests)
         {
             _processingRequests = true;
@@ -275,44 +238,21 @@ public class BrightnessAutomationController : IDisposable
     {
         try
         {
-            var expectedPaths = computer.Monitors.Select(monitor => monitor.DisplayDevicePath).ToArray();
-            var pointerScreen = request.Delta.HasValue && computer.Features.BrightnessTarget == "Pointer" ? System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position).DeviceName : null;
             var result = await Task.Run(() =>
             {
                 var applied = new List<(Display Display, int Brightness)>();
-                var failed = new List<(string Path, long Version)>();
                 var failures = 0;
-                var deferred = false;
-                var displays = GetConnectedDisplays();
-                foreach (var display in displays)
+                foreach (var display in GetConnectedDisplays())
                 {
-                    if (request.Delta.HasValue && computer.Features.BrightnessTarget == "Selected" && !string.Equals(display.DevicePath, computer.Features.TargetDevicePath, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (pointerScreen != null && !string.Equals(display.ScreenName, pointerScreen, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (request.OnlyDevicePath != null && !string.Equals(display.DevicePath, request.OnlyDevicePath, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (request.ExpectedVersion.HasValue && request.ExpectedVersion != _brightnessController.GetVersion(display)) continue;
-                    if (version != Volatile.Read(ref _operationVersion)) break;
-                    if (_brightnessController.IsDisplaySleeping) { deferred = true; break; }
-                    if (!_brightnessController.SupportsBrightness(display))
-                    {
-                        if (request.ScheduleSince.HasValue) { failures++; failed.Add((display.DevicePath, _brightnessController.GetVersion(display))); }
-                        continue;
-                    }
-                    if (version != Volatile.Read(ref _operationVersion)) break;
-                    if (_brightnessController.IsDisplaySleeping) { deferred = true; break; }
-                    var monitorSettings = computer.Monitors.FirstOrDefault(item => string.Equals(item.DisplayDevicePath, display.DevicePath, StringComparison.OrdinalIgnoreCase));
-                    var target = Math.Clamp(request.Brightness ?? 0, monitorSettings?.MinimumBrightness ?? 0, monitorSettings?.MaximumBrightness ?? 100);
-                    var brightness = request.Delta.HasValue ? _brightnessController.AdjustBrightnessWithinLimits(display, request.Delta.Value, monitorSettings?.MinimumBrightness ?? 0, monitorSettings?.MaximumBrightness ?? 100) :
-                        (request.ExpectedVersion.HasValue ? _brightnessController.SetBrightnessIfCurrent(display, target, request.ExpectedVersion.Value) :
-                            ApplyBrightnessTransition(display, target, computer.Features.ReduceMotion ? 0 : computer.Features.TransitionMilliseconds, version, monitorSettings?.MinimumBrightness ?? 0, monitorSettings?.MaximumBrightness ?? 100)) ? target : (int?)null;
+                    if (version != Volatile.Read(ref _operationVersion) || _brightnessController.IsDisplaySleeping) break;
+                    if (!_brightnessController.SupportsBrightness(display)) continue;
+                    if (version != Volatile.Read(ref _operationVersion) || _brightnessController.IsDisplaySleeping) break;
+                    var brightness = _brightnessController.AdjustBrightness(display, request.Delta);
                     if (brightness.HasValue) applied.Add((display, brightness.Value));
-                    else if (_brightnessController.IsDisplaySleeping) { deferred = true; break; }
-                    else { failures++; failed.Add((display.DevicePath, _brightnessController.GetVersion(display))); }
+                    else if (_brightnessController.IsDisplaySleeping) break;
+                    else failures++;
                 }
-                if (request.ScheduleSince.HasValue)
-                    foreach (var path in expectedPaths.Where(path => (request.OnlyDevicePath == null || string.Equals(path, request.OnlyDevicePath, StringComparison.OrdinalIgnoreCase)) &&
-                        !displays.Any(display => string.Equals(display.DevicePath, path, StringComparison.OrdinalIgnoreCase))))
-                        failed.Add((path, request.ExpectedVersion ?? 0));
-                return (Applied: applied, Failures: failures, Deferred: deferred, Failed: failed);
+                return (Applied: applied, Failures: failures);
             });
             if (version != _operationVersion || !ReferenceEquals(computer, _computer)) return;
             // Continuations run on the dispatcher; only the UI thread updates the live settings model.
@@ -322,110 +262,22 @@ public class BrightnessAutomationController : IDisposable
                 if (!latest.HasValue || latest.Value == applied.Brightness)
                     _persistence.Remember(applied.Display, applied.Brightness);
             }
-            if (request.ScheduleSince.HasValue && !result.Deferred && request.RetryAttempt < 8)
-                foreach (var failed in result.Failed)
-                    _scheduleRetries[failed.Path] = new ScheduleRetry(request with { OnlyDevicePath = failed.Path,
-                        ExpectedVersion = failed.Version, RetryAttempt = request.RetryAttempt + 1 }, failed.Version, LocalNow.AddSeconds(15));
-            if (result.Deferred && request.ScheduleSince.HasValue)
-            {
-                if (request.ScheduleSince.Value < _lastScheduleCheck) _lastScheduleCheck = request.ScheduleSince.Value;
-                if (!_brightnessController.IsDisplaySleeping) CheckSchedules(LocalNow);
-                return;
-            }
             Status = result.Applied.Count == 0 && result.Failures == 0
-                ? $"{request.Source}: no connected monitor supports DDC/CI brightness."
-                : $"{request.Source}: applied to {result.Applied.Count} monitor(s)" +
+                ? $"Brightness shortcut: no connected monitor supports DDC/CI brightness."
+                : $"Brightness shortcut: applied to {result.Applied.Count} monitor(s)" +
                   (result.Failures > 0 ? $"; {result.Failures} failed. Open Adjust brightness to retry." : ".");
-            if (request.Delta.HasValue && computer.Features.ShowNotifications && result.Applied.Count > 0)
-                DisplayFX.Global.GlobalEvents.NotificationRequested?.Invoke(string.Join(", ", result.Applied.Select(item => $"{_persistence.GetMonitorName(item.Display) ?? "Monitor"}: {item.Brightness}%")));
         }
         catch (Exception exception)
         {
             if (version == _operationVersion && ReferenceEquals(computer, _computer))
-                Status = $"{request.Source} failed. Reconnect the monitor and retry in Adjust brightness.";
+                Status = $"Brightness shortcut failed. Reconnect the monitor and retry in Adjust brightness.";
             _logger.Warn(exception, "Brightness automation failed.");
         }
         NotifyStatus();
     }
-    private bool ApplyBrightnessTransition(Display display, int target, int duration, int operationVersion, int minimum, int maximum)
-    {
-        if (duration == 0) return _brightnessController.SetBrightness(display, target);
-        var start = _brightnessController.GetBrightness(display);
-        if (!start.HasValue) return _brightnessController.SetBrightness(display, target);
-        var expected = _brightnessController.GetVersion(display);
-        var steps = Math.Clamp(duration / 150, 1, 30);
-        for (var step = 1; step <= steps; step++)
-        {
-            if (operationVersion != Volatile.Read(ref _operationVersion)) return false;
-            var level = Math.Clamp((int)Math.Round(start.Value + (target - start.Value) * step / (double)steps), minimum, maximum);
-            if (!_brightnessController.SetBrightnessIfCurrent(display, level, expected)) return false;
-            expected = _brightnessController.GetVersion(display);
-            if (step < steps) System.Threading.Thread.Sleep(duration / steps);
-        }
-        return true;
-    }
-
-    private void OnDisplayPowerChanged(bool awake)
-    {
-        if (!awake || !_started || _dispatcher.HasShutdownStarted) return;
-        _dispatcher.BeginInvoke(new Action(() =>
-        {
-            if (_started) CheckSchedules(LocalNow);
-        }));
-    }
-
-    private void OnTimerTick(object? sender, EventArgs args) => CheckSchedules(LocalNow);
-
-    private void CheckSchedules(DateTime now)
-    {
-        if (_computer?.IsBrightnessScheduleEnabled != true)
-        {
-            _lastScheduleCheck = now;
-            return;
-        }
-        // Keep the interval open while displays sleep, then apply its latest due entry on wake.
-        if (_brightnessController.IsDisplaySleeping) return;
-        var previous = _lastScheduleCheck;
-        _lastScheduleCheck = now;
-        if (_computer.BrightnessSchedules.Any(item => !string.IsNullOrWhiteSpace(item.DevicePath)))
-        {
-            foreach (var path in _computer.Monitors.Select(monitor => monitor.DisplayDevicePath).Concat(_computer.BrightnessSchedules.Select(item => item.DevicePath).OfType<string>()).Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                var due = FindLatestDueSchedule(_computer.BrightnessSchedules.Where(item => string.IsNullOrWhiteSpace(item.DevicePath) || string.Equals(item.DevicePath, path, StringComparison.OrdinalIgnoreCase)), previous, now, _computer.Features.SolarLatitude, _computer.Features.SolarLongitude);
-                if (due == null) continue;
-                _scheduleRetries.Remove(path);
-                _ = Enqueue(new AutomationRequest(null, due.Brightness, "Brightness schedule", previous, path));
-            }
-            EnqueueDueRetries(now);
-            return;
-        }
-        var schedule = FindLatestDueSchedule(_computer.BrightnessSchedules, previous, now, _computer.Features.SolarLatitude, _computer.Features.SolarLongitude);
-        if (schedule is not null)
-        {
-            _scheduleRetries.Clear();
-            _ = Enqueue(new AutomationRequest(null, schedule.Brightness, $"Daily schedule at {schedule.Time}", previous));
-        }
-        else EnqueueDueRetries(now);
-    }
-    private void EnqueueDueRetries(DateTime now)
-    {
-            foreach (var retry in _scheduleRetries.Where(pair => pair.Value.Due <= now).ToList())
-            {
-                _scheduleRetries.Remove(retry.Key);
-                _ = Enqueue(retry.Value.Request);
-            }
-    }
-
-    private void UpdateScheduleStatus()
-    {
-        Status = _computer?.IsBrightnessScheduleEnabled == true ? "Daily brightness schedule enabled; waiting for the next local time." :
-            "Daily brightness schedule is off.";
-        NotifyStatus();
-    }
-
     /// <summary>After sleep, applies only the latest due occurrence; ignores invalid and future entries.</summary>
     public static BrightnessSchedule? FindLatestDueSchedule(IEnumerable<BrightnessSchedule>? schedules,
-        DateTime previous, DateTime now, double? latitude = null, double? longitude = null)
+        DateTime previous, DateTime now)
     {
         if (schedules is null || now <= previous)
             return null;
@@ -435,24 +287,17 @@ public class BrightnessAutomationController : IDisposable
         {
             if (schedule is null || !schedule.IsValid)
                 continue;
-            for (var day = -1; day <= 8; day++)
+            for (var day = 0; day <= 1; day++)
             {
-                var occurrence = schedule.Occurrence(now.Date.AddDays(-day), latitude, longitude);
+                var occurrence = schedule.Occurrence(now.Date.AddDays(-day));
                 if (!occurrence.HasValue || occurrence > now || occurrence <= previous || occurrence <= latestOccurrence) continue;
                 latest = schedule; latestOccurrence = occurrence.Value;
             }
         }
         return latest;
     }
-    public static bool HasScheduleConflicts(IReadOnlyList<BrightnessSchedule> schedules)
-    {
-        for (var index = 0; index < schedules.Count; index++)
-            if (schedules.Skip(index + 1).Any(other => (schedules[index].Days & other.Days) != 0 &&
-                string.Equals(schedules[index].DevicePath ?? "", other.DevicePath ?? "", StringComparison.OrdinalIgnoreCase) &&
-                schedules[index].SolarEvent == other.SolarEvent && schedules[index].OffsetMinutes == other.OffsetMinutes &&
-                (other.SolarEvent != "Fixed" || schedules[index].Time == other.Time))) return true;
-        return false;
-    }
+    public static bool HasScheduleConflicts(IReadOnlyList<BrightnessSchedule> schedules) =>
+        schedules.GroupBy(schedule => schedule.Time, StringComparer.Ordinal).Any(group => group.Count() > 1);
 
     private void NotifyStatus()
     {

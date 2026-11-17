@@ -71,7 +71,7 @@ internal static class FullAppAuditRegressionChecks
             count += RemovedProfileChecks(directory, true);
             count += TopologyDuringApplyChecks(directory);
             count += DeleteDuringApplyChecks(directory);
-            count += ImportFailureChecks(directory);
+            count += ManualApplyChecks(directory);
             var (selectionShell, selectionModel, _, _, selectionGate) = MakeShell(directory);
             typeof(ShellViewModel).GetField("_nvidiaDisplays", Private)!.SetValue(selectionShell,
                 new List<NvAPIWrapper.Display.Display> { null! });
@@ -180,30 +180,38 @@ internal static class FullAppAuditRegressionChecks
         return 2;
     }
 
-    private static int ImportFailureChecks(string directory)
+    private static int ManualApplyChecks(string directory)
     {
-        var shell = (FakeImportShell)RuntimeHelpers.GetUninitializedObject(typeof(FakeImportShell));
-        var (_, _, _, colors, gate) = MakeShell(directory, shell);
-        var cache = new FakeCache();
-        var hardware = new FakeBrightness();
-        var persistence = new BrightnessPersistenceController(new DataController(directory, directory + ".absent"), cache, hardware, Logger);
-        using var automation = new BrightnessAutomationController(cache, hardware, persistence, Logger);
-        void Set(string name, object value) => typeof(ShellViewModel).GetField(name, Private)!.SetValue(shell, value);
-        Set("_brightnessPersistenceController", persistence); Set("_brightnessAutomationController", automation);
-        Set("_retainedMonitors", new Dictionary<string, MonitorViewModel>());
-        shell.Computer.IsColorDiagnosticsEnabled = true;
-        var path = Path.Combine(directory, "import.json");
-        Directory.CreateDirectory(directory);
-        ProfileTransferController.ExportSettings(shell.Computer, path);
-        shell.Computer.IsColorDiagnosticsEnabled = false;
-        colors.Release.SetResult(false);
-        Pump(() => shell.ImportSettings(path));
-        if (!shell.OperationStatus.Contains("could not be applied") || !File.Exists(Path.Combine(directory, "Data.json")))
-            throw new InvalidOperationException("Import must preserve saved settings while reporting failed active colors.");
-        var diagnostics = (ColorUpdateDiagnostics)typeof(ShellViewModel).GetField("_colorDiagnostics", Private)!.GetValue(shell)!;
-        if (!diagnostics.Enabled) throw new InvalidOperationException("Imported diagnostic preferences must take effect without reopening Settings.");
-        gate.Dispose();
-        return 2;
+        var (shell, monitor, profile, colors, gate) = MakeShell(Path.Combine(directory, "manual-apply"));
+        using (gate)
+        {
+            var other = new ProfileViewModel(new Profile(monitor.Monitor, "Other", new(.5, .5, 1, .5), false),
+                monitor, new ProfileSettingViewModelFactory(new EventAggregator()));
+            monitor.Monitor.Profiles.Add(other.Profile);
+            monitor.Profiles.Add(other);
+            shell.SelectedMonitor = monitor;
+            shell.SelectedProfile = profile;
+            Pump(async () =>
+            {
+                var apply = shell.Apply();
+                try
+                {
+                    await colors.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                    if (shell.CanApply || shell.CanSave || shell.ApplyActionLabel != "Applying…")
+                        throw new InvalidOperationException("An in-flight application must show a stable button label and block repeat Apply and Save.");
+                    var repeat = shell.Apply();
+                    if (!repeat.IsCompletedSuccessfully)
+                        throw new InvalidOperationException("Repeat Apply clicks must not enqueue additional hardware work.");
+                    shell.SelectedProfile = other;
+                }
+                finally { colors.Release.TrySetResult(true); }
+                await apply;
+                if (colors.Calls != 1 || !profile.IsActive || shell.SelectedProfile != other || shell.ApplyActionLabel != "Apply" ||
+                    shell.OperationStatus != "Profile applied." || !shell.CanApply)
+                    throw new InvalidOperationException("Apply completion must report success without changing the user's new selection.");
+            });
+        }
+        return 4;
     }
 
     private static (ShellViewModel, MonitorViewModel, ProfileViewModel, FakeColors, SemaphoreSlim) MakeShell(string directory, ShellViewModel? shell = null)
@@ -266,19 +274,5 @@ internal static class FullAppAuditRegressionChecks
             return Release.Task.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
         }
     }
-    private sealed class FakeImportShell : ShellViewModel
-    {
-        private FakeImportShell() : base(null!, null!, null!, null!, null!, null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!) { }
-        public override void RefreshMonitors()
-        {
-            foreach (var monitor in Computer.Monitors)
-            {
-                var model = new MonitorViewModel(monitor, new FakeDisplay());
-                foreach (var profile in monitor.Profiles)
-                    model.Profiles.Add(new ProfileViewModel(profile, model, new ProfileSettingViewModelFactory(new EventAggregator())));
-                Monitors.Add(model);
-            }
-        }
-    }
+
 }

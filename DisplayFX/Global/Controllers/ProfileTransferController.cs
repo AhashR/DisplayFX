@@ -61,12 +61,8 @@ public static class ProfileTransferController
         {
             HotkeyModifiers = includeTriggers ? source.HotkeyModifiers : null,
             HotkeyKey = includeTriggers ? source.HotkeyKey : null,
-            LinkedExecutablePath = includeTriggers ? source.LinkedExecutablePath : null
-            , Notes = source.Notes, Icon = source.Icon, MarkerColor = source.MarkerColor,
-            AdditionalExecutablePaths = includeTriggers ? new(source.AdditionalExecutablePaths) : new(),
-            RulePriority = includeTriggers ? source.RulePriority : 0,
-            FullscreenOnly = includeTriggers && source.FullscreenOnly,
-            PowerCondition = includeTriggers ? source.PowerCondition : "Any"
+            LinkedExecutablePath = includeTriggers ? source.LinkedExecutablePath : null,
+            Notes = source.Notes, Icon = source.Icon
         };
     }
 
@@ -97,13 +93,43 @@ public static class ProfileTransferController
 
     public static string? GetExecutableConflict(Profile profile)
     {
-        var paths = profile.AdditionalExecutablePaths.Concat(new[] { profile.LinkedExecutablePath }).Where(path => !string.IsNullOrWhiteSpace(path)).ToList();
-        if (paths.Count == 0) return null;
-        return profile.Monitor.Profiles.Any(other => !ReferenceEquals(other, profile) && other.RulePriority == profile.RulePriority &&
-            (profile.PowerCondition == "Any" || other.PowerCondition == "Any" || profile.PowerCondition == other.PowerCondition) &&
-            other.AdditionalExecutablePaths.Concat(new[] { other.LinkedExecutablePath }).Any(otherPath => paths.Any(path =>
-                ProcessController.MatchesExecutable(otherPath, path) || ProcessController.MatchesExecutable(path, otherPath))))
+        var path = profile.LinkedExecutablePath;
+        if (profile.IsDefault || string.IsNullOrWhiteSpace(path)) return null;
+        return profile.Monitor.Profiles.Any(other => !other.IsDefault && !ReferenceEquals(other, profile) &&
+            (ProcessController.MatchesExecutable(other.LinkedExecutablePath, path) || ProcessController.MatchesExecutable(path, other.LinkedExecutablePath)))
             ? "This application is already linked to another profile on this monitor. Unlink it there first." : null;
+    }
+
+    // Backups made by older builds may contain rules which cannot be represented by a daily,
+    // all-monitor timer. Skip these rules instead of broadening when or where they can run.
+    internal static void NormalizeLegacyOptions(JObject payload)
+    {
+        var features = payload.GetValue("Features", StringComparison.OrdinalIgnoreCase) as JObject;
+        if (features?.GetValue("PopupOrder", StringComparison.OrdinalIgnoreCase) is JValue order && (string?)order == "Favorites")
+            order.Value = "Saved";
+        if (payload.GetValue("BrightnessSchedules", StringComparison.OrdinalIgnoreCase) is not JArray schedules) return;
+        var removed = false;
+        foreach (var schedule in schedules.OfType<JObject>().ToList())
+        {
+            var days = schedule.GetValue("Days", StringComparison.OrdinalIgnoreCase);
+            var device = schedule.GetValue("DevicePath", StringComparison.OrdinalIgnoreCase);
+            var solar = schedule.GetValue("SolarEvent", StringComparison.OrdinalIgnoreCase);
+            var offset = schedule.GetValue("OffsetMinutes", StringComparison.OrdinalIgnoreCase);
+            if ((days != null && (days.Type != JTokenType.Integer || (long)days != 127)) ||
+                (device != null && device.Type != JTokenType.Null && (device.Type != JTokenType.String || !string.IsNullOrWhiteSpace((string?)device))) ||
+                (solar != null && (solar.Type != JTokenType.String || (string?)solar != "Fixed")) ||
+                (offset != null && (offset.Type != JTokenType.Integer || (long)offset != 0)))
+            {
+                schedule.Remove();
+                removed = true;
+            }
+        }
+        if (removed && schedules.Count == 0)
+        {
+            var enabled = payload.Property("IsBrightnessScheduleEnabled", StringComparison.OrdinalIgnoreCase);
+            if (enabled != null) enabled.Value = false;
+            else payload["IsBrightnessScheduleEnabled"] = false;
+        }
     }
 
     public static Computer ReadSettings(string path)
@@ -118,6 +144,7 @@ public static class ProfileTransferController
             foreach (var profile in profiles)
                 ValidateProfilePayload(profile as JObject ?? throw new InvalidDataException("The file contains an invalid profile."));
         }
+        NormalizeLegacyOptions(payload);
         var imported = payload.ToObject<Computer>(JsonSerializer.Create(SerializerSettings))
                        ?? throw new InvalidDataException("The file does not contain settings.");
         ValidateComputer(imported);
@@ -220,11 +247,8 @@ public static class ProfileTransferController
         first.ProfileSetting.Contrast == second.ProfileSetting.Contrast &&
         first.ProfileSetting.Gamma == second.ProfileSetting.Gamma &&
         first.ProfileSetting.DigitalVibrance == second.ProfileSetting.DigitalVibrance &&
-        first.ProfileSetting.RedGain == second.ProfileSetting.RedGain && first.ProfileSetting.GreenGain == second.ProfileSetting.GreenGain && first.ProfileSetting.BlueGain == second.ProfileSetting.BlueGain && first.ProfileSetting.TemperatureKelvin == second.ProfileSetting.TemperatureKelvin &&
         first.HotkeyKey == second.HotkeyKey && first.HotkeyModifiers == second.HotkeyModifiers &&
-        first.AdditionalExecutablePaths.SequenceEqual(second.AdditionalExecutablePaths, StringComparer.OrdinalIgnoreCase) &&
-        first.RulePriority == second.RulePriority && first.FullscreenOnly == second.FullscreenOnly && first.PowerCondition == second.PowerCondition &&
-        first.Notes == second.Notes && first.Icon == second.Icon && first.MarkerColor == second.MarkerColor &&
+        first.Notes == second.Notes && first.Icon == second.Icon &&
         string.Equals(first.LinkedExecutablePath, second.LinkedExecutablePath, StringComparison.OrdinalIgnoreCase);
 
     private static string ValidateName(string? name)
@@ -243,11 +267,7 @@ public static class ProfileTransferController
             throw new InvalidDataException("A profile is missing its color settings.");
         ValidateName(profile.Name);
         if (profile.Id == Guid.Empty) throw new InvalidDataException("Profile identity is invalid.");
-        if (profile.Notes == null || profile.Notes.Length > 4000 || profile.Icon == null || profile.Icon.Length > 8 ||
-            profile.AdditionalExecutablePaths == null || profile.AdditionalExecutablePaths.Count > 32 ||
-            profile.AdditionalExecutablePaths.Any(path => string.IsNullOrWhiteSpace(path) || path.Length > 2048 || path.Any(char.IsControl)) ||
-            profile.PowerCondition is not ("Any" or "AC" or "Battery") || profile.RulePriority is < -100 or > 100 ||
-            profile.MarkerColor == null || !System.Text.RegularExpressions.Regex.IsMatch(profile.MarkerColor, "^#[0-9a-fA-F]{6}$"))
+        if (profile.Notes == null || profile.Notes.Length > 4000)
             throw new InvalidDataException("Profile metadata or application rules are invalid.");
         if (profile.ImportedProfileName != null) ValidateName(profile.ImportedProfileName);
         var settings = profile.ProfileSetting;
@@ -255,8 +275,6 @@ public static class ProfileTransferController
         ValidateRange(settings.Contrast, 0, 1, "contrast");
         ValidateRange(settings.Gamma, 0.4, 2.8, "gamma");
         ValidateRange(settings.DigitalVibrance, 0, 1, "digital vibrance");
-        ValidateRange(settings.RedGain, 0, 1, "red gain"); ValidateRange(settings.GreenGain, 0, 1, "green gain"); ValidateRange(settings.BlueGain, 0, 1, "blue gain");
-        ValidateRange(settings.TemperatureKelvin, 2500, 10000, "temperature tint");
         ValidateHotkey(profile.HotkeyKey, profile.HotkeyModifiers);
         if (profile.LinkedExecutablePath != null && (profile.LinkedExecutablePath.Length > 2048 || profile.LinkedExecutablePath.Any(char.IsControl)))
             throw new InvalidDataException("The linked executable path is invalid.");
@@ -294,9 +312,6 @@ public static class ProfileTransferController
                 throw new InvalidDataException("The file contains an invalid monitor, duplicate monitor, or brightness setting.");
             if (monitor.CustomName != null && (monitor.CustomName.Length > 80 || monitor.CustomName.Any(char.IsControl)))
                 throw new InvalidDataException("Monitor labels must contain at most 80 characters and no control characters.");
-            if (monitor.BrightnessGroup == null || monitor.BrightnessGroup.Length > 80 || monitor.MinimumBrightness is < 0 or > 100 ||
-                monitor.MaximumBrightness is < 0 or > 100 || monitor.MinimumBrightness > monitor.MaximumBrightness || monitor.BrightnessOffset is < -100 or > 100)
-                throw new InvalidDataException("Monitor brightness limits, offset or group are invalid.");
             if (monitor.HardwareIdentity != null && (monitor.HardwareIdentity.Length > 256 || monitor.HardwareIdentity.Any(char.IsControl)))
                 throw new InvalidDataException("Monitor identity is invalid.");
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -316,8 +331,6 @@ public static class ProfileTransferController
             BrightnessAutomationController.HasScheduleConflicts(computer.BrightnessSchedules))
             throw new InvalidDataException("Brightness schedules must have unique HH:mm times and levels from 0 to 100; shortcut steps must be from 1 to 100.");
         ValidateHotkey(computer.BrightnessIncreaseKey, computer.BrightnessIncreaseModifiers);
-        if (computer.IsBrightnessScheduleEnabled && computer.BrightnessSchedules.Any(schedule => schedule.SolarEvent != "Fixed") && !computer.Features.SolarLatitude.HasValue)
-            throw new InvalidDataException("Solar schedules need a saved latitude and longitude before they can be enabled.");
         ValidateHotkey(computer.BrightnessDecreaseKey, computer.BrightnessDecreaseModifiers);
         if (validateTriggers && computer.IsBrightnessShortcutsEnabled)
         {

@@ -16,7 +16,6 @@ using DisplayFX.Interface.Profiles;
 using DisplayFX.Interface.Settings;
 using DisplayFX.Interface.Shell;
 using DisplayFX.Interface.BrightnessFlyout;
-using DisplayFX.Interface.Workspace;
 using DisplayFX.Objects.Entities;
 using DisplayFX.Objects.Factories;
 using Monitor = DisplayFX.Objects.Entities.Monitor;
@@ -47,67 +46,56 @@ internal static class UiSmokeChecks
         var temporary = Path.Combine(AppContext.BaseDirectory, "ui-fixture-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var computer = new Computer { IsMinimizeToTray = true, IsRememberBrightnessOnStart = true,
-                BrightnessSchedules = new() { new() { Time = "08:00", Brightness = 80 }, new() { Time = "20:30", Brightness = 30 } } };
+            var computer = new Computer { IsMinimizeToTray = true, IsRememberBrightnessOnStart = true };
             var monitor = new Monitor("fixture", "Fixture monitor", new System.Drawing.Size(2560, 1440), 144) { CustomName = "Desk monitor" };
             var profile = new Profile(monitor, "Default", new ProfileSetting(0.5, 0.5, 1, 0.5), true, true);
             monitor.Profiles.Add(profile);
             computer.Monitors.Add(monitor);
             var settingsData = new DataController(temporary, temporary + ".json");
-            var feedbackCache = new DisplayCache();
-            var feedbackHardware = new FixtureBrightness();
-            using var feedback = new BrightnessAutomationController(feedbackCache, feedbackHardware,
-                new BrightnessPersistenceController(settingsData, feedbackCache, feedbackHardware, NLog.LogManager.GetLogger("UiFeedback")),
-                NLog.LogManager.GetLogger("UiFeedback"));
-            var settingsModel = new SettingsViewModel(computer, new RegistryController(), settingsData, feedback);
+            var importCount = 0;
+            var exportCount = 0;
+            var settingsModel = new SettingsViewModel(computer, new RegistryController(), settingsData,
+                _ => { importCount++; return "Profile imported."; }, _ => { exportCount++; return "Profile exported."; },
+                canImport: () => true, canExport: () => true, profileFileContext: () => "Desk monitor · Default");
             var settingsView = new SettingsView { DataContext = settingsModel };
-            count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings");
-            if (settingsView.WindowStyle != WindowStyle.SingleBorderWindow || settingsView.Content is not ScrollViewer)
-                throw new InvalidOperationException("Settings must have a native title bar and a scrolling fallback for small screens.");
-            if (((FrameworkElement)settingsView.Content).ActualHeight > 550)
-                throw new InvalidOperationException("Settings must fit within a compact screen height.");
+            count += Render((FrameworkElement)settingsView.Content, 534, outputDirectory, "settings");
+            var settingsContent = (FrameworkElement)settingsView.Content;
+            var settingsScroll = (ScrollViewer)settingsView.FindName("SettingsScroll");
+            if (!ReferenceEquals(settingsView.Content, settingsScroll) ||
+                Descendants<Button>(settingsContent).Any(button => button.Content is string label &&
+                    label is "General" or "Profile files" or "About"))
+                throw new InvalidOperationException("Settings must use the full-width scroll area without sidebar navigation.");
             count++;
-
-            const string shortcutError = "Brightness shortcut is unavailable or used by another app. Choose another combination.";
-            typeof(BrightnessAutomationController).GetProperty(nameof(feedback.ShortcutError))!.SetValue(feedback, shortcutError);
-            typeof(BrightnessAutomationController).GetProperty(nameof(feedback.ShortcutStatus))!.SetValue(feedback, shortcutError);
-            typeof(BrightnessAutomationController).GetMethod("NotifyStatus", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(feedback, null);
-            count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings-shortcut-error");
-            var errorText = Descendants<TextBlock>((FrameworkElement)settingsView.Content).SingleOrDefault(text => text.Text == shortcutError);
-            if (errorText?.Visibility != Visibility.Visible || errorText.ActualHeight <= 0 || ((FrameworkElement)settingsView.Content).ActualHeight > 550)
-                throw new InvalidOperationException("Shortcut registration failures must be visible in the compact Settings layout.");
-            count++;
-            for (var time = 0; time < 12; time++) settingsModel.BrightnessSchedules.Add(new() { Time = $"{time:00}:15", Brightness = 40 });
-            count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings-many-times-error");
-            if (((FrameworkElement)settingsView.Content).ActualHeight > 550)
-                throw new InvalidOperationException($"Shortcut errors and paged daily times must fit together without hiding controls (height: {((FrameworkElement)settingsView.Content).ActualHeight}).");
-            count++;
-            typeof(BrightnessAutomationController).GetProperty(nameof(feedback.ShortcutError))!.SetValue(feedback, null);
-            typeof(BrightnessAutomationController).GetMethod("NotifyStatus", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(feedback, null);
-            count += Render((FrameworkElement)settingsView.Content, 698, outputDirectory, "settings-many-times");
-            if (settingsModel.VisibleSchedules.Count() != SettingsViewModel.SchedulePageSize || ((FrameworkElement)settingsView.Content).ActualHeight > 550)
-                throw new InvalidOperationException("Many daily times must remain accessible without growing or scrolling the settings window.");
-            count++;
-
-            var settingsScroll = (ScrollViewer)settingsView.Content;
-            settingsScroll.Measure(new Size(480, 280));
-            settingsScroll.Arrange(new Rect(0, 0, 480, 280));
-            settingsScroll.UpdateLayout();
-            if (settingsScroll.ExtentHeight <= settingsScroll.ViewportHeight || settingsScroll.ExtentWidth <= settingsScroll.ViewportWidth)
-                throw new InvalidOperationException("Settings must remain scrollable at constrained high-DPI work-area sizes.");
-            count++;
-            count += Render(settingsScroll, 698, outputDirectory, "settings-scroll-fallback");
-            settingsModel.PreviousSchedulePage();
-            count += Render(settingsScroll, 698, outputDirectory, "settings-validation-page");
-            var brightnessField = Descendants<TextBox>(settingsScroll).First(field => field.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path == nameof(BrightnessSchedule.BrightnessInput));
-            brightnessField.Text = "invalid";
-            brightnessField.GetBindingExpression(TextBox.TextProperty)!.UpdateSource();
-            settingsModel.NextSchedulePage();
-            count += Render(settingsScroll, 698, outputDirectory, "settings-validation-next-page");
-            settingsModel.SaveBrightnessAutomation();
-            if (settingsModel.SettingsStatus == "Brightness settings saved." || !settingsModel.BrightnessSchedules.Any(schedule => !schedule.IsValid))
-                throw new InvalidOperationException("Paging must preserve invalid raw drafts and block saving them.");
-            count++;
+            var switches = Descendants<CheckBox>(settingsContent).Select(control => control.Content as string);
+            if (settingsView.WindowStyle != WindowStyle.SingleBorderWindow ||
+                !switches.SequenceEqual(new[] { "Launch with Windows", "Start minimised", "Close to tray" }) ||
+                settingsView.FindName("InstalledVersion") is not TextBlock version || version.Text != settingsModel.VersionText ||
+                settingsView.FindName("Done") != null)
+                throw new InvalidOperationException("Settings must use native chrome and show only the retained preferences and the app version.");
+            var brokenSettings = new SettingsViewModel(computer, new RegistryController(), settingsData,
+                _ => throw new IOException("Unavailable"), checkUpdates: () => Task.FromException<string>(new IOException("Offline")));
+            brokenSettings.ImportProfileCommand.Execute(null);
+            if (!brokenSettings.SettingsStatus.Contains("Unavailable"))
+                throw new InvalidOperationException("File dialog errors must be reported in Settings.");
+            BrightnessFeatureRegressionChecks.Pump(brokenSettings.CheckForUpdates);
+            if (!brokenSettings.SettingsStatus.Contains("Offline") || !brokenSettings.CanCheckForUpdates)
+                throw new InvalidOperationException("A failed update check must allow retry.");
+            count += 2;
+            var import = (Button)settingsView.FindName("ImportProfile");
+            var export = (Button)settingsView.FindName("ExportProfile");
+            if (!Equals(import.Content, "Import profile") || !Equals(export.Content, "Export profile"))
+                throw new InvalidOperationException("Profile files must live in Settings and have concise labels.");
+            import.Command.Execute(null);
+            export.Command.Execute(null);
+            if (importCount != 1 || exportCount != 1 || settingsModel.SettingsStatus != "Profile exported.")
+                throw new InvalidOperationException("Settings transfer buttons must invoke their actions and report the result.");
+            settingsContent.Height = 130;
+            count += Render(settingsContent, 600, null, "compact-settings");
+            settingsContent.ClearValue(FrameworkElement.HeightProperty);
+            if (settingsScroll.ExtentHeight <= settingsScroll.ViewportHeight ||
+                settingsScroll.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled)
+                throw new InvalidOperationException("Settings must scroll vertically when the window is constrained.");
+            count += 4;
 
             var monitorModel = new MonitorViewModel(monitor, null!);
             var profileModel = new ProfileViewModel(profile, monitorModel, new ProfileSettingViewModelFactory(new EventAggregator()));
@@ -117,16 +105,26 @@ internal static class UiSmokeChecks
             var shellModel = (ShellViewModel)RuntimeHelpers.GetUninitializedObject(typeof(ShellViewModel));
             void Set(string field, object value) => typeof(ShellViewModel).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(shellModel, value);
             Set("_computer", computer);
-            Set("_displayName", $"DisplayFX {DisplayFX.Global.AppVersion.Current}");
             Set("_monitors", new ObservableCollection<MonitorViewModel> { monitorModel });
             Set("_selectedMonitor", monitorModel);
             Set("_selectedProfile", profileModel);
-            var logger = NLog.LogManager.GetLogger("UiSmoke");
-            var hardware = new MonitorBrightnessController(logger);
-            var cache = new DisplayCache();
-            Set("_brightnessAutomationController", new BrightnessAutomationController(cache, hardware,
-                new BrightnessPersistenceController(new DataController(temporary, temporary + ".json"), cache, hardware, logger), logger));
             Set("_operationStatus", "");
+
+            var profileActions = profileModel.ContextMenu.Items.OfType<MenuItem>().Select(item => item.Header as string).ToArray();
+            if (!profileActions.SequenceEqual(new[] { "Choose icon", "Move up", "Move down", "Duplicate" }))
+                throw new InvalidOperationException("Default profiles must offer only their retained context menu actions.");
+            var custom = new Profile(monitor, "Game", new ProfileSetting(0.5, 0.5, 1, 0.5), false)
+            {
+                IsFavorite = true,
+                HotkeyKey = System.Windows.Input.Key.F8
+            };
+            monitor.ReferenceProfileId = custom.Id;
+            var customModel = new ProfileViewModel(custom, monitorModel, new ProfileSettingViewModelFactory(new EventAggregator()));
+            if (!customModel.ContextMenu.Items.OfType<MenuItem>().Select(item => item.Header as string).SequenceEqual(
+                    new[] { "Choose icon", "Remove existing profile shortcut", "Move up", "Move down", "Duplicate", "Rename...", "Remove" }))
+                throw new InvalidOperationException("Legacy favorites and references must not reintroduce removed menu items.");
+            monitor.ReferenceProfileId = null;
+            count += 2;
 
             // Load the shell markup without ShellView's tray and live-app constructor.
             var repo = new DirectoryInfo(AppContext.BaseDirectory);
@@ -151,44 +149,65 @@ internal static class UiSmokeChecks
             shellModel.IsNotifying = true;
             typeof(ShellViewModel).GetProperty("OperationStatus")!.SetValue(shellModel, status);
             count += Render((FrameworkElement)shell.Content, 600, outputDirectory, "main-window-status");
-            if (!Descendants<TextBlock>((FrameworkElement)shell.Content).Any(text => text.Text == status && text.Visibility == Visibility.Visible && text.ActualHeight > 0))
-                throw new InvalidOperationException("Profile errors must remain readable without hovering the warning icon.");
+            var mainContent = (FrameworkElement)shell.Content;
+            var rail = (Border)shell.FindName("NavigationRail");
+            var editor = (StackPanel)shell.FindName("EditorPane");
+            var monitorNavigation = (ItemsControl)shell.FindName("DisplayNavigation");
+            var profileNavigation = (ItemsControl)shell.FindName("ProfileNavigation");
+            if (rail == null || editor == null || monitorNavigation?.Items.Count != 1 || profileNavigation?.Items.Count != 1 ||
+                Grid.GetColumn(rail) != 0 ||
+                editor.TranslatePoint(new Point(), mainContent).X <= rail.ActualWidth ||
+                ((TextBlock)shell.FindName("SelectedDisplayName")).Text != monitorModel.Name ||
+                ((TextBlock)shell.FindName("SelectedProfileHeading")).Text != profileModel.Name)
+                throw new InvalidOperationException("The left sidebar must contain displays and profiles, with the active context in the right pane.");
             count++;
+            if (Descendants<TextBlock>(mainContent).Any(text => text.Text == status) ||
+                !Descendants<TextBlock>(mainContent).Any(text => Equals(text.ToolTip, status) && text.Visibility == Visibility.Visible && text.ActualHeight > 0))
+                throw new InvalidOperationException("The full status belongs in the status icon's tooltip, not in a separate line.");
+            if (shell.FindName("RestoreOriginal") != null || shell.FindName("ImportProfile") != null || Descendants<Expander>(mainContent).Any() || Descendants<ProgressBar>(mainContent).Any() ||
+                Descendants<Slider>(mainContent).Count() != 4 ||
+                new[] { "Revert", "Apply", "Update" }.Any(name => shell.FindName(name) is not Button))
+                throw new InvalidOperationException("The simplified editor must retain all four sliders and the three profile actions.");
+            count += 2;
+            var defaultEditor = Descendants<DisplayFX.Interface.ProfileSettings.ProfileSettingView>(mainContent).Single();
+            if (Descendants<TextBlock>(defaultEditor).Any(t => t.Text == "Linked app" && t.ActualHeight > 0 && (t.Parent is DockPanel panel && panel.Parent is Grid linkGrid && linkGrid.Parent is Border card && card.Visibility == Visibility.Visible)) ||
+                !Descendants<TextBlock>(defaultEditor).Any(t => t.Text == "Colour settings") ||
+                !Descendants<TextBlock>(defaultEditor).Any(t => t.Text == "Brightness") || shell.Title != "DisplayFX")
+                throw new InvalidOperationException("The default profile must hide linking, use British wording and keep the title unversioned.");
+            var customEditor = new DisplayFX.Interface.ProfileSettings.ProfileSettingView { DataContext = customModel.ProfileSettings };
+            count += Render(customEditor, 410, null, "custom-profile");
+            if (!Descendants<TextBlock>(customEditor).Any(t => t.Text == "Linked app" && t.ActualHeight > 0 && (t.Parent is DockPanel panel && panel.Parent is Grid linkGrid && linkGrid.Parent is Border card && card.Visibility == Visibility.Visible)))
+                throw new InvalidOperationException("Custom profiles must retain app linking.");
+            count += 2;
             var colourSlider = Descendants<Slider>((FrameworkElement)shell.Content).First();
             Drag(colourSlider);
             if (!profileModel.ProfileSettings!.IsDirty || profile.ProfileSetting.Brightness != 0.5)
                 throw new InvalidOperationException("Dragging the colour slider must update only the editable draft.");
             count++;
             count += WindowMovementChecks.Run(shell, settingsView);
-            var workspaceModel = new WorkspaceViewModel(shellModel, settingsData, feedbackHardware, feedbackCache);
-            var workspaceView = new WorkspaceView { DataContext = workspaceModel };
-            ViewModelBinder.Bind(workspaceModel, workspaceView, null);
-            var workspaceContent = (FrameworkElement)workspaceView.Content;
-            workspaceContent.Height = 650;
-            var workspaceTabs = Descendants<TabControl>(workspaceContent).Single();
-            var names = new[] { "appearance", "profiles", "automation", "hardware", "diagnostics", "backups", "updates" };
-            for (var tab = 0; tab < workspaceTabs.Items.Count; tab++)
-            {
-                workspaceTabs.SelectedIndex = tab;
-                count += Render(workspaceContent, 900, outputDirectory, "workspace-" + names[tab]);
-                if (workspaceContent.ActualHeight > 650 || workspaceContent.ActualWidth > 901)
-                    throw new InvalidOperationException("Workspace tabs must remain constrained and scrollable.");
-            }
-            workspaceTabs.SelectedIndex = 0;
-            var priorTheme = workspaceModel.Preferences.Theme;
-            AppearanceController.Apply(new() { Theme = "Light", Language = "nl", TextScalePercent = 200 });
-            count += Render(workspaceContent, 900, outputDirectory, "workspace-nl-light-200");
-            if (!Descendants<TextBlock>(workspaceContent).Any(text => text.Text == "Thema") ||
-                !Descendants<Button>(workspaceContent).Any(button => Equals(button.Content, "Voorkeuren toepassen")))
-                throw new InvalidOperationException("Dutch localization must update dynamic labels without recreating the view.");
+            if (shell.FindName("OpenWorkspace") != null || shell.FindName("MainActions") != null ||
+                Descendants<TextBox>(mainContent).Any(text => text.Name == "HotkeyRecorderButton"))
+                throw new InvalidOperationException("The main editor must replace Workspace and omit the profile shortcut recorder.");
             count++;
-            if (workspaceModel.Preferences.Theme != priorTheme || workspaceModel.Preferences.Density == null)
-                throw new InvalidOperationException("Changing language must not clear stored choice identifiers.");
-            count++;
-            AppearanceController.Apply(new() { Theme = "Dark", Language = "en" });
-            BrightnessFeatureRegressionChecks.Pump(async () => await workspaceModel.DisposeAsync());
-            workspaceView.Close();
+            var channels = Descendants<TextBox>(mainContent).Select(text => text.Tag as string).Where(tag => tag != null).ToArray();
+            if (!channels.SequenceEqual(new[] { "Brightness", "Contrast", "DigitalVibrance", "Gamma" }))
+                throw new InvalidOperationException("Each displayed color value must have an inline editor.");
+            count += 2;
             shell.Close();
+
+            var corner = typeof(BrightnessFlyoutView).GetMethod("GetCornerPosition", BindingFlags.Static | BindingFlags.NonPublic)!;
+            foreach (var (area, size, gap, expected) in new[]
+            {
+                (new System.Drawing.Rectangle(0, 0, 1920, 1040), new System.Drawing.Size(320, 232), 12, new System.Drawing.Point(1588, 796)),
+                (new System.Drawing.Rectangle(-1280, -240, 1280, 984), new System.Drawing.Size(320, 232), 12, new System.Drawing.Point(-332, 500)),
+                (new System.Drawing.Rectangle(1920, 48, 2560, 1392), new System.Drawing.Size(480, 348), 18, new System.Drawing.Point(3982, 1074)),
+                (new System.Drawing.Rectangle(20, 40, 220, 200), new System.Drawing.Size(320, 232), 12, new System.Drawing.Point(20, 40))
+            })
+            {
+                if (!Equals(corner.Invoke(null, new object[] { area, size, gap }), expected))
+                    throw new InvalidOperationException("The brightness flyout must stay in the selected display's bottom-right work-area corner.");
+                count++;
+            }
 
             var flyoutDocument = XDocument.Load(Path.Combine(repo.FullName, "DisplayFX", "Interface", "BrightnessFlyout", "BrightnessFlyoutView.xaml"));
             flyoutDocument.Root!.Attribute(xaml + "Class")!.Remove();
@@ -199,6 +218,15 @@ internal static class UiSmokeChecks
             using var secondRow = new BrightnessMonitorViewModel(new FixtureDisplay("second"), fixtureHardware, name: "DELL 2009W");
             flyout.DataContext = new FlyoutFixture { Monitors = new[] { firstRow, secondRow } };
             count += Render((FrameworkElement)flyout.Content, 320, outputDirectory, "brightness-flyout");
+            var flyoutContent = (FrameworkElement)flyout.Content;
+            var flyoutSliders = Descendants<Slider>(flyoutContent).ToArray();
+            var footerButtons = Descendants<Button>(flyoutContent).ToArray();
+            if (flyout.FindName("BrightnessHeading") != null || Descendants<TextBlock>(flyoutContent).Any(text => text.Text == "Brightness") ||
+                flyoutSliders.Length != 2 || flyoutSliders.Any(slider => slider.ActualHeight < 26 || slider.ActualWidth < 240) ||
+                footerButtons.Length != 1 || footerButtons[0].Name != "OpenDisplayFX" || flyout.FindName("LinkBrightness") != null ||
+                flyoutContent.ActualHeight is < 124 or > 167)
+                throw new InvalidOperationException($"The tray popup must omit its heading and keep just the Open DisplayFX action, with full-size sliders and a compact height. Actual height: {flyoutContent.ActualHeight}.");
+            count++;
             Drag(Descendants<Slider>((FrameworkElement)flyout.Content).First());
             BrightnessFeatureRegressionChecks.Pump(() => firstRow.FlushPendingBrightnessAsync());
             if (fixtureHardware.LastWrite != firstRow.Brightness || firstRow.Brightness <= 35)
@@ -275,7 +303,6 @@ internal static class UiSmokeChecks
     private sealed class FlyoutFixture
     {
         public BrightnessMonitorViewModel[] Monitors { get; set; } = Array.Empty<BrightnessMonitorViewModel>();
-        public bool IsLinked { get; set; }
         public string LinkStatus => "";
     }
 

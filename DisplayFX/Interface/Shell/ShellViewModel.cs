@@ -32,12 +32,10 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
     private readonly IEventAggregator _eventAggregator;
     private readonly ILogger _logger;
     private readonly MonitorViewModelFactory _monitorViewModelFactory;
-    private readonly BrightnessAutomationController _brightnessAutomationController;
     private readonly MonitorTopologyController _monitorTopologyController;
     private readonly MonitorIdentificationService _monitorIdentificationService;
     private readonly ComputerFactory _computerFactory;
     private readonly Dictionary<string, MonitorViewModel> _retainedMonitors = new(StringComparer.OrdinalIgnoreCase);
-    private bool _viewReady;
     private bool _settingsOpen;
     private string _operationStatus = string.Empty;
 
@@ -49,7 +47,6 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
     private Computer _computer = null!;
     private ObservableCollection<MonitorViewModel> _monitors = null!;
     private List<Display>? _nvidiaDisplays;
-    private readonly string _displayName;
     private bool _nvidiaInitialized;
     private bool _profileSettingsIsDirty;
     private MonitorViewModel? _selectedMonitor;
@@ -79,7 +76,6 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         DisplayController displayController,
         DisplayWindowManager nvidiaDisplayWindowManager,
         RegistryController registryController,
-        BrightnessAutomationController brightnessAutomationController,
         MonitorTopologyController monitorTopologyController,
         MonitorIdentificationService monitorIdentificationService,
         ComputerFactory computerFactory,
@@ -97,7 +93,6 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         _displayController = displayController;
         _nvidiaDisplayWindowManager = nvidiaDisplayWindowManager;
         _registryController = registryController;
-        _brightnessAutomationController = brightnessAutomationController;
         _monitorTopologyController = monitorTopologyController;
         _monitorIdentificationService = monitorIdentificationService;
         _computerFactory = computerFactory;
@@ -105,7 +100,6 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         _appSwitching = appSwitching;
         _colorDiagnostics = colorDiagnostics;
 
-        _displayName = $"DisplayFX {AppVersion.Current}";
 
         _eventAggregator.SubscribeOnUIThread(this);
 
@@ -125,7 +119,7 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
 
     public override string DisplayName
     {
-        get => _displayName;
+        get => "DisplayFX";
         set { }
     }
 
@@ -139,7 +133,6 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
             NotifyOfPropertyChange();
             NotifyOfPropertyChange(nameof(SelectedProfile));
             NotifyOfPropertyChange(nameof(CanAddProfile));
-            NotifyOfPropertyChange(nameof(CanImportProfile));
             NotifyOfPropertyChange(nameof(ProfileGroupBoxText));
             NotifyOfPropertyChange(nameof(VisibleProfiles));
         }
@@ -155,6 +148,7 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
             ProfileSettingsIsDirty = value?.ProfileSettings?.IsDirty ?? false;
             NotifyOfPropertyChange();
             NotifyOfPropertyChange(nameof(CanApply));
+            NotifyOfPropertyChange(nameof(CanSave));
         }
     }
 
@@ -167,12 +161,14 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
             _profileSettingsIsDirty = value;
             NotifyOfPropertyChange();
             NotifyOfPropertyChange(nameof(CanApply));
+            NotifyOfPropertyChange(nameof(CanSave));
         }
     }
 
-    public bool CanApply => SelectedProfile?.ProfileSettings is { HasInputErrors: false };
+    public bool CanApply => !IsApplying && SelectedProfile?.ProfileSettings is { HasInputErrors: false };
+    public bool CanSave => CanApply && ProfileSettingsIsDirty;
+    private bool _manualApplyInProgress;
     public bool CanAddProfile => SelectedMonitor is not null && SelectedMonitor.Profiles.Count < ProfileTransferController.MaximumProfilesPerMonitor;
-    public bool CanImportProfile => CanAddProfile;
     public bool CanIdentifyMonitors => Monitors.Count > 0;
     public string OperationStatus
     {
@@ -193,36 +189,22 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         }
     }
 
-    public bool IsApplySettingsOnStart
-    {
-        get => Computer.IsApplySettingsOnStart;
-        set
-        {
-            if (value == Computer.IsApplySettingsOnStart) return;
-            Computer.IsApplySettingsOnStart = value;
-            NotifyOfPropertyChange();
-            Write();
-        }
-    }
-
     public async Task OpenSettings()
     {
         if (_settingsOpen) return;
         _settingsOpen = true;
         foreach (var profile in Monitors.SelectMany(monitor => monitor.Profiles))
             UnregisterProfileHotkey(profile);
-        _brightnessAutomationController.SuspendHotkeys(true);
         try
         {
-            var restorePath = await _nvidiaDisplayWindowManager.OpenSettings(Computer);
-            if (restorePath != null) await ImportSettings(restorePath);
-            NotifyOfPropertyChange(nameof(IsApplySettingsOnStart));
+            await _nvidiaDisplayWindowManager.OpenSettings(Computer, ImportSingleProfile, ExportSelectedProfile, CheckForUpdates,
+                () => CanAddProfile, () => SelectedProfile != null,
+                () => SelectedMonitor == null ? "No display selected." :
+                    SelectedProfile == null ? SelectedMonitor.Name : $"{SelectedMonitor.Name} · {SelectedProfile.Name}");
         }
         finally
         {
-            _colorDiagnostics.Enabled = Computer.IsColorDiagnosticsEnabled;
             _settingsOpen = false;
-            _brightnessAutomationController.SuspendHotkeys(false);
             RefreshAllHotkeys();
             _appSwitching.Refresh();
         }
@@ -259,6 +241,7 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         if (ReferenceEquals(message.Profile, SelectedProfile?.Profile))
             ProfileSettingsIsDirty = message.IsDirty;
         NotifyOfPropertyChange(nameof(CanApply));
+        NotifyOfPropertyChange(nameof(CanSave));
         return Task.CompletedTask;
     }
 
@@ -276,14 +259,11 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
             .IfSuccess(computer =>
             {
                 Computer = computer;
-                AppearanceController.Apply(computer.Features);
-                _colorDiagnostics.Enabled = computer.IsColorDiagnosticsEnabled;
+                AppearanceController.Apply();
                 _brightnessPersistenceController.Attach(computer);
-                _brightnessAutomationController.Attach(computer);
                 Computer.Monitors.ForEach(BuildMonitorViewModel);
                 LoadNvidiaDisplays();
                 SelectPrimaryMonitorByDefault();
-                ApplySettingsOnStart();
             })
             ;
     }
@@ -304,7 +284,8 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
 
         if (primaryMonitor != null)
         {
-            primaryMonitor.IsSelected = true;
+            SelectMonitor(primaryMonitor);
+            SetSelectedProfile();
         }
     }
 
@@ -353,22 +334,6 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
             _nvidiaInitialized = true;
         }
         return Display.GetDisplays().ToList();
-    }
-
-    private async void ApplySettingsOnStart()
-    {
-        if (!IsApplySettingsOnStart)
-            return;
-
-        if (Computer.Features.StartupDelaySeconds > 0) await Task.Delay(TimeSpan.FromSeconds(Computer.Features.StartupDelaySeconds));
-
-        foreach (var monitorViewModel in Monitors)
-        {
-            var activeProfile = monitorViewModel.Profiles.FirstOrDefault(p => p.IsActive);
-
-            if (activeProfile is not null)
-                await ApplyProfile(activeProfile, false);
-        }
     }
 
     private void UpdateTrayTooltip()
@@ -423,12 +388,11 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         }
         else
         {
-            SelectMonitor(null);
-            SelectPrimaryMonitorByDefault();
+            if (Monitors.Count == 0) SelectMonitor(null);
+            else SelectPrimaryMonitorByDefault();
             SetSelectedProfile();
         }
         RefreshAllHotkeys();
-        if (Computer.Features.ReapplyAfterDock) _appSwitching.InvalidateHardware(Monitors.Select(monitor => monitor.Monitor));
         NotifyOfPropertyChange(nameof(CanIdentifyMonitors));
         NotifyOfPropertyChange(nameof(VisibleMonitors));
         UpdateTrayTooltip();
@@ -487,77 +451,8 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         NotifyOfPropertyChange(nameof(VisibleProfiles));
         if (Monitors.Contains(monitor)) SelectProfile(model);
         NotifyOfPropertyChange(nameof(CanAddProfile));
-            NotifyOfPropertyChange(nameof(CanImportProfile));
         NotifyOfPropertyChange(nameof(ProfileGroupBoxText));
         RefreshAllHotkeys();
-    }
-
-    private void ExportProfile(Guid guid)
-    {
-        var profile = FindProfile(guid);
-        if (profile == null) return;
-        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "DisplayFX profile (*.json)|*.json",
-            FileName = "DisplayFX-profile.json", DefaultExt = ".json" };
-        if (dialog.ShowDialog() != true) return;
-        try { ProfileTransferController.ExportProfile(profile.Profile, dialog.FileName); OperationStatus = "Saved profile exported."; }
-        catch (Exception ex) { ReportFailure("Could not export profile.", ex); }
-    }
-
-    public async Task ImportSettings(string? path = null)
-    {
-        if (path == null)
-        {
-            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "DisplayFX settings (*.json)|*.json" };
-            if (dialog.ShowDialog() != true) return;
-            path = dialog.FileName;
-        }
-        try
-        {
-            if (_retainedMonitors.Values.SelectMany(monitor => monitor.Profiles).Any(profile => profile.ProfileSettings?.IsDirty == true) &&
-                MessageBox.Show("Restoring settings will discard unsaved profile edits. Continue?", "Restore settings",
-                    MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-            var merged = ProfileTransferController.MergeSettings(Computer, ProfileTransferController.ReadSettings(path));
-            // Persist before replacing live models; a bad file or failed write cannot discard drafts.
-            var previous = Computer;
-            _dataController.Write(merged);
-            try
-            {
-                if (merged.IsStartWithWindows != previous.IsStartWithWindows)
-                    _registryController.RegisterForStartWithWindows(merged.IsStartWithWindows);
-            }
-            catch { _dataController.Write(previous); throw; }
-            foreach (var profile in _retainedMonitors.Values.SelectMany(monitor => monitor.Profiles))
-            {
-                UnregisterProfileHotkey(profile);
-                _eventAggregator.Unsubscribe(profile.ProfileSettings!);
-            }
-            _brightnessAutomationController.Detach();
-            _modelVersion++;
-            _appSwitching.Reset();
-            _retainedMonitors.Clear();
-            Monitors.Clear();
-            Computer = merged;
-            _colorDiagnostics.Enabled = merged.IsColorDiagnosticsEnabled;
-            _brightnessPersistenceController.Attach(merged);
-            _brightnessAutomationController.Attach(merged);
-            SelectedMonitor = null;
-            SelectedProfile = null;
-            RefreshMonitors();
-            var colorsApplied = true;
-            foreach (var monitor in Monitors.ToList())
-            {
-                var active = monitor.Profiles.FirstOrDefault(profile => profile.IsActive);
-                if (active != null && !await ApplyProfile(active, false)) colorsApplied = false;
-            }
-            UpdateTrayTooltip();
-            if (_viewReady) _brightnessAutomationController.Start();
-            NotifyOfPropertyChange(nameof(IsStartWithWindows));
-            NotifyOfPropertyChange(nameof(IsApplySettingsOnStart));
-            OperationStatus = colorsApplied
-                ? "Settings merged. Existing profiles retained; imported controls apply from now on."
-                : "Settings merged, but some monitor colors could not be applied. Refresh displays and apply their profiles again; see diagnostic logs.";
-        }
-        catch (Exception ex) { ReportFailure("Could not import settings.", ex); }
     }
 
     private void ReportFailure(string message, Exception exception)
@@ -572,8 +467,8 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         profileViewModel.ProfileRemoved += async guid => await OnProfileRemoved(guid);
         profileViewModel.ProfileDuplicateRequested += async guid => await DuplicateProfile(guid);
         profileViewModel.ProfileRenameRequested += async guid => await RenameProfile(guid);
-        profileViewModel.ProfileExportRequested += ExportProfile;
-        profileViewModel.ProfileFavoriteRequested += ToggleFavorite;
+        profileViewModel.IconRequested += SetProfileIcon;
+        profileViewModel.ClearShortcutRequested += RemoveExistingProfileShortcut;
         profileViewModel.ProfileMoveRequested += MoveProfile;
         if (profileViewModel.ProfileSettings != null)
             profileViewModel.ProfileSettings.PropertyChanged += (_, args) =>
@@ -602,6 +497,7 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
 
         ProfileSettingsIsDirty = SelectedProfile?.ProfileSettings?.IsDirty ?? false;
         NotifyOfPropertyChange(nameof(CanApply));
+        NotifyOfPropertyChange(nameof(CanSave));
     }
 
     private async Task OnProfileRemoved(Guid guid)
@@ -640,7 +536,6 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
             SetSelectedProfile();
 
         NotifyOfPropertyChange(nameof(CanAddProfile));
-            NotifyOfPropertyChange(nameof(CanImportProfile));
         NotifyOfPropertyChange(nameof(ProfileGroupBoxText));
 
         RefreshAllHotkeys();
@@ -658,11 +553,14 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
     {
         if (_changingSelection) return;
         var monitor = Monitors.FirstOrDefault(m => m.Guid == selectedMonitor);
-        if (isSelected && monitor != null)
-            SelectMonitor(monitor);
-        else if (ReferenceEquals(SelectedMonitor, monitor))
-            SelectMonitor(null);
-
+        if (monitor == null) return;
+        if (!isSelected)
+        {
+            if (ReferenceEquals(SelectedMonitor, monitor)) SelectMonitor(monitor);
+            return;
+        }
+        if (ReferenceEquals(SelectedMonitor, monitor)) return;
+        SelectMonitor(monitor);
         SetSelectedProfile();
     }
 
@@ -680,7 +578,7 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
             catch (Exception ex)
             {
                 SelectedNvidiaMonitor = null;
-                ReportFailure("NVIDIA display connection changed. Refresh displays to reconnect color controls.", ex);
+                ReportFailure("NVIDIA display connection changed. Refresh displays to reconnect colour controls.", ex);
             }
         }
         finally
@@ -709,7 +607,7 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
 
     private void SetSelectedProfile()
     {
-        SelectProfile(SelectedMonitor?.Profiles.FirstOrDefault(p => p.IsActive));
+        SelectProfile(SelectedMonitor?.Profiles.FirstOrDefault(p => p.IsActive) ?? SelectedMonitor?.Profiles.FirstOrDefault());
     }
 
     public async Task AddProfile()
@@ -723,20 +621,27 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         catch (Exception ex) { ReportFailure("Could not create profile.", ex); }
     }
 
-    public void ImportProfile()
+    internal ProfileViewModel ImportProfileFile(MonitorViewModel monitor, string path)
     {
-        var monitor = SelectedMonitor;
-        if (monitor == null || !CanImportProfile) return;
-        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "DisplayFX profile (*.json)|*.json", Title = "Import profile colors" };
-        if (dialog.ShowDialog() != true) return;
-        try { AddTransferredProfile(monitor, ProfileTransferController.ReadProfile(dialog.FileName, monitor.Monitor)); OperationStatus = "Profile imported. Choose Apply to use its colors; shortcuts and app links were not imported."; }
-        catch (Exception exception) { ReportFailure("Could not import profile.", exception); }
+        if (!Monitors.Contains(monitor) || monitor.Profiles.Count >= ProfileTransferController.MaximumProfilesPerMonitor)
+            throw new InvalidOperationException("Choose a connected monitor with room for another profile.");
+        var profile = ProfileTransferController.ReadProfile(path, monitor.Monitor);
+        AddTransferredProfile(monitor, profile);
+        return monitor.Profiles.Single(model => model.Profile.Id == profile.Id);
     }
 
     public async Task Apply()
     {
-        if (SelectedProfile?.ProfileSettings == null) return;
-        await ApplyProfile(SelectedProfile, settingsOverride: SelectedProfile.ProfileSettings.ProfileSetting);
+        var profile = SelectedProfile;
+        if (!CanApply || profile?.ProfileSettings == null) return;
+        _manualApplyInProgress = true;
+        NotifyOfPropertyChange(nameof(ApplyActionLabel));
+        try { await ApplyProfile(profile, settingsOverride: profile.ProfileSettings.ProfileSetting); }
+        finally
+        {
+            _manualApplyInProgress = false;
+            NotifyOfPropertyChange(nameof(ApplyActionLabel));
+        }
     }
 
     public async Task Revert()
@@ -750,9 +655,10 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
 
     public void Update()
     {
-        if (SelectedProfile == null) return;
-        try { SelectedProfile.ProfileSettings!.Save(Write); }
+        if (!CanSave || SelectedProfile?.ProfileSettings is not { } editor) return;
+        try { editor.Save(Write); }
         catch (Exception ex) { ReportFailure("Could not save profile. Your edits remain available to retry.", ex); return; }
+        OperationStatus = "Profile saved.";
         ProfileSettingsIsDirty = false;
         _appSwitching?.Refresh();
         
@@ -764,10 +670,8 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
     {
         base.OnViewLoaded(view);
         InitializeHotkeyManager(view);
-        _viewReady = true;
         _monitorTopologyController.TopologyChanged += OnMonitorTopologyChanged;
         _monitorTopologyController.Start();
-        _brightnessAutomationController.Start();
         _appTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _appTimer.Tick += OnApplicationTick;
         _appTimer.Start();
@@ -778,16 +682,12 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
     private async void OnApplicationTick(object? sender, EventArgs args)
     {
         RecoverDriverIfNeeded();
-        await ObserveExternalColors();
-        if (HasPreview || _previewStarting || IsAutomationPaused || !Computer.Features.AutomaticSwitchingEnabled || _switchingApplication || _profileWork > 0 || DateTime.UtcNow < _nextAppRetry || _settingsOpen ||
+        if (_switchingApplication || _profileWork > 0 || DateTime.UtcNow < _nextAppRetry || _settingsOpen ||
             Monitors.Any(monitor => monitor.Profiles.Any(profile => profile.ProfileSettings?.IsRecordingHotkey == true))) return;
         _switchingApplication = true;
         try
         {
             var application = _processController.GetForegroundExecutablePath();
-            if (!string.Equals(application, _candidateApplication, StringComparison.OrdinalIgnoreCase))
-            { _candidateApplication = application; _candidateSince = DateTimeOffset.UtcNow; }
-            if ((DateTimeOffset.UtcNow - _candidateSince).TotalMilliseconds < Computer.Features.FocusDelayMilliseconds) return;
             await _appSwitching.UpdateAsync(application, Monitors.Select(monitor => monitor.Monitor).ToList(),
                 async profile =>
                 {
@@ -795,7 +695,7 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
                     var success = model != null && await ApplyProfile(model, false);
                     if (!success) _nextAppRetry = DateTime.UtcNow.AddSeconds(30);
                     return success;
-                }, _processController.IsForegroundFullscreen(), System.Windows.Forms.SystemInformation.PowerStatus.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online ? "AC" : "Battery");
+                });
         }
         catch (Exception ex) { _logger.Warn(ex, "Could not update the linked application profile."); }
         finally { _switchingApplication = false; }
@@ -866,10 +766,6 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         if (computer.Monitors.SelectMany(monitor => monitor.Profiles).Any(other => other != profile &&
                 other.HotkeyKey == profile.HotkeyKey && (other.HotkeyModifiers ?? ModifierKeys.None) == modifiers))
             return "Shortcut is assigned to another profile. Choose another combination and save.";
-        if (computer.IsBrightnessShortcutsEnabled &&
-            (computer.BrightnessIncreaseKey == profile.HotkeyKey && (computer.BrightnessIncreaseModifiers ?? ModifierKeys.None) == modifiers ||
-             computer.BrightnessDecreaseKey == profile.HotkeyKey && (computer.BrightnessDecreaseModifiers ?? ModifierKeys.None) == modifiers))
-            return "Shortcut is assigned to brightness controls. Choose another combination and save.";
         return null;
     }
 
@@ -880,7 +776,6 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         foreach (var profile in Monitors.SelectMany(monitor => monitor.Profiles)) UnregisterProfileHotkey(profile);
         if (!suspended)
             foreach (var profile in Monitors.SelectMany(monitor => monitor.Profiles)) RegisterProfileHotkey(profile);
-        _brightnessAutomationController?.SuspendHotkeys(suspended);
     }
 
     private void UnregisterProfileHotkey(ProfileViewModel profileViewModel)
@@ -896,79 +791,78 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
     private async Task<bool> ApplyProfile(ProfileViewModel profileViewModel, bool updateSelection = true,
         ProfileSetting? settingsOverride = null)
     {
-        if (HasPreview || _previewStarting) await CancelPreview();
         var monitor = Monitors.FirstOrDefault(m => m.Profiles.Contains(profileViewModel));
         if (monitor == null) return false;
         var requested = ++_requestSequence;
         _profileRequests[monitor.Monitor] = requested;
         var modelVersion = _modelVersion;
+        var selectedAtStart = SelectedProfile;
+        var monitorAtStart = SelectedMonitor;
         var settings = settingsOverride ?? profileViewModel.Profile.ProfileSetting;
         var snapshot = settings.Copy();
         Display? nvidiaDisplay;
         try { nvidiaDisplay = _nvidiaDisplays?.FirstOrDefault(d => d.Name == monitor.ScreenName); }
         catch (Exception exception) { ReportFailure("The monitor became unavailable.", exception); return false; }
         _profileWork++;
-        NotifyOfPropertyChange(nameof(IsApplying)); NotifyOfPropertyChange(nameof(ApplyingText));
+        NotifyApplyAvailability();
         await _colorGate.WaitAsync();
         try
         {
             if (modelVersion != _modelVersion || _profileRequests[monitor.Monitor] != requested || !Monitors.Contains(monitor) || !monitor.Profiles.Contains(profileViewModel)) return false;
             var display = monitor.Display;
-            var duration = Computer.Features.ReduceMotion ? 0 : Computer.Features.ColorTransitionMilliseconds;
-            var success = await _colorDiagnostics.ApplyAsync(() => _displayController.UpdateColorSettingsWithTransition(display, snapshot, nvidiaDisplay, duration, () => modelVersion == System.Threading.Volatile.Read(ref _modelVersion)));
+            var success = await Task.Run(() => _displayController.UpdateColorSettings(display, snapshot, nvidiaDisplay));
             if (modelVersion != _modelVersion || !Monitors.Contains(monitor) || !monitor.Profiles.Contains(profileViewModel)) return false;
             var currentRequest = _profileRequests[monitor.Monitor] == requested;
             if (!success)
             {
-                OperationStatus = _displayController.LastError ?? "Profile could not be applied. Retry after checking the display connection.";
+                if (currentRequest)
+                    OperationStatus = _displayController.LastError ?? "Profile could not be applied. Retry after checking the display connection.";
                 return false;
             }
-            OperationStatus = _colorDiagnostics.Warning ?? string.Empty;
-                    profileViewModel.IsActive = true;
-                    if (updateSelection && currentRequest) _appSwitching?.ManualSelection(monitor.Monitor);
-                    foreach (var otherProfile in monitor.Profiles.Where(p => p.Guid != profileViewModel.Guid))
-                    {
-                        otherProfile.Deactivate();
-                    }
 
-                    if (updateSelection && currentRequest)
-                    {
-                        SelectProfile(profileViewModel);
-                    }
+            if (currentRequest) OperationStatus = _manualApplyInProgress && settingsOverride != null ? "Profile applied." : string.Empty;
+            profileViewModel.IsActive = true;
+            if (updateSelection && currentRequest) _appSwitching?.ManualSelection(monitor.Monitor);
+            foreach (var otherProfile in monitor.Profiles.Where(p => p.Guid != profileViewModel.Guid))
+                otherProfile.Deactivate();
 
-                    try
-                    {
-                        Write();
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Error(ex, "Profile was applied, but its active state could not be saved.");
-                        OperationStatus = "Profile was applied, but its active state could not be saved.";
-                    }
-                    GlobalEvents.UpdateToolTip?.Invoke();
-                    UpdateTrayTooltip();
-                    if (Computer.Features.ShowNotifications) GlobalEvents.NotificationRequested?.Invoke($"{monitor.Name}: {profileViewModel.Name}");
-                    return true;
+            // A slow monitor must not take over the editor after the user navigates away.
+            if (updateSelection && currentRequest && ReferenceEquals(SelectedProfile, selectedAtStart) &&
+                ReferenceEquals(SelectedMonitor, monitorAtStart))
+                SelectProfile(profileViewModel);
+
+            try { Write(); }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Profile was applied, but its active state could not be saved.");
+                if (currentRequest) OperationStatus = "Profile was applied, but its active state could not be saved.";
+            }
+            UpdateTrayTooltip();
+            return true;
         }
         catch (Exception ex) { ReportFailure("Could not apply profile.", ex); return false; }
-        finally { _colorGate.Release(); _profileWork--; NotifyOfPropertyChange(nameof(IsApplying)); NotifyOfPropertyChange(nameof(ApplyingText)); }
+        finally { _colorGate.Release(); _profileWork--; NotifyApplyAvailability(); }
+    }
+
+    private void NotifyApplyAvailability()
+    {
+        NotifyOfPropertyChange(nameof(IsApplying));
+        NotifyOfPropertyChange(nameof(CanApply));
+        NotifyOfPropertyChange(nameof(CanSave));
     }
 
     protected override async Task OnDeactivateAsync(bool close, CancellationToken cancellationToken)
     {
         if (close)
         {
-            await CancelPreview();
             _modelVersion++;
             _appTimer?.Stop();
             _processController?.Dispose();
             _commandServer?.Dispose();
-            if (_featureHardware != null) _featureHardware.DisplayPowerChanged -= OnFeaturePowerChanged;
             if (_appTimer != null) _appTimer.Tick -= OnApplicationTick;
             _monitorTopologyController.TopologyChanged -= OnMonitorTopologyChanged;
             _monitorTopologyController.Dispose();
             _monitorIdentificationService.Dispose();
-            _brightnessAutomationController.Detach();
             _brightnessPersistenceController.Detach();
             foreach (var profile in Monitors.SelectMany(monitor => monitor.Profiles))
                 UnregisterProfileHotkey(profile);

@@ -30,7 +30,7 @@ public class ProfileNameViewModel : Screen
         }
     }
 
-    public string ValidationMessage => DisplayFX.Global.Controllers.LocalizationController.Instance[string.IsNullOrWhiteSpace(ProfileName)
+    public string ValidationMessage => string.IsNullOrWhiteSpace(ProfileName)
         ? "Enter a profile name."
         : ProfileName.Trim().Length > 80
             ? "Use 80 characters or fewer."
@@ -38,7 +38,7 @@ public class ProfileNameViewModel : Screen
                 ? "The name cannot contain control characters."
                 : _existingNames.Contains(ProfileName.Trim())
                     ? "A profile with this name already exists on this monitor."
-                    : string.Empty];
+                    : string.Empty;
 
     public bool CanSave => ValidationMessage.Length == 0;
 

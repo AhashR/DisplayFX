@@ -53,14 +53,12 @@ internal static class BrightnessFeatureRegressionChecks
         monitor.Profiles.Add(profile);
         other.Profiles.Add(otherProfile);
         computer.Monitors.AddRange(new[] { monitor, other });
-        Check(SettingsViewModel.ValidateBrightnessSettings(computer) == null, "Default brightness shortcuts must be valid.");
         computer.BrightnessDecreaseKey = computer.BrightnessIncreaseKey;
-        Check(SettingsViewModel.ValidateBrightnessSettings(computer) != null, "Two directions cannot share a shortcut.");
         computer.BrightnessDecreaseKey = Key.PageDown;
         profile.HotkeyKey = computer.BrightnessIncreaseKey;
         profile.HotkeyModifiers = computer.BrightnessIncreaseModifiers;
-        Check(BrightnessAutomationController.GetShortcutValidationError(computer, true) != null &&
-            ShellViewModel.GetProfileShortcutValidationError(computer, profile) != null, "Brightness/profile conflicts must be reported on both sides.");
+        Check(ShellViewModel.GetProfileShortcutValidationError(computer, profile) == null,
+            "A saved legacy brightness shortcut must not reserve the combination of a retained profile shortcut.");
         computer.IsBrightnessShortcutsEnabled = false;
         Check(ShellViewModel.GetProfileShortcutValidationError(computer, profile) == null, "Disabled brightness shortcuts must release profile combinations.");
         otherProfile.HotkeyKey = profile.HotkeyKey;
@@ -73,15 +71,7 @@ internal static class BrightnessFeatureRegressionChecks
         profile.HotkeyKey = null;
         profile.HotkeyModifiers = null;
         computer.BrightnessShortcutStep = 0;
-        Check(SettingsViewModel.ValidateBrightnessSettings(computer) != null, "Zero shortcut step must not save.");
         computer.BrightnessShortcutStep = 10;
-        computer.IsBrightnessScheduleEnabled = true;
-        Check(SettingsViewModel.ValidateBrightnessSettings(computer) != null, "An enabled empty schedule must not save.");
-        computer.BrightnessSchedules.Add(morning);
-        computer.BrightnessSchedules.Add(new BrightnessSchedule { Time = morning.Time, Brightness = 10 });
-        Check(SettingsViewModel.ValidateBrightnessSettings(computer) != null, "Duplicate daily times must fail validation.");
-        computer.BrightnessSchedules.RemoveAt(1);
-        Check(SettingsViewModel.ValidateBrightnessSettings(computer) == null, "Valid schedules must save without enabling shortcuts.");
 
         var directory = Path.Combine(AppContext.BaseDirectory, "brightness-features-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -193,40 +183,21 @@ internal static class BrightnessFeatureRegressionChecks
             Check(hardware.GetStatus(first)?.Message == "Saved", "A feedback subscriber cannot corrupt recorded hardware status.");
 
             var settings = new SettingsViewModel(computer, new RegistryController(), data);
-            settings.IsBrightnessShortcutsEnabled = true;
-            settings.BeginRecording(true);
-            Check(settings.RecordKey(Key.F10, ModifierKeys.Control), "Brightness shortcut recorder must capture combinations.");
-            settings.BrightnessShortcutStep = 7;
-            settings.BrightnessSchedules[0].Brightness = 60;
-            Check(!computer.IsBrightnessShortcutsEnabled && computer.BrightnessShortcutStep == 10 && morning.Brightness == 80,
-                "Automation edits must stay in a detached draft until explicitly saved.");
-            settings.SaveBrightnessAutomation();
-            Check(computer.IsBrightnessShortcutsEnabled && computer.BrightnessShortcutStep == 7 && computer.BrightnessIncreaseKey == Key.F10 &&
-                data.Load().Value.BrightnessSchedules[0].Brightness == 60, "Saved automation must include keys, steps and schedule drafts.");
-            settings.BeginRecording(false);
-            settings.RecordKey(Key.Escape, ModifierKeys.None);
-            Check(settings.DecreaseShortcutText.Contains("Page Down"), "Cancelling key capture must preserve its combination.");
-            settings.BrightnessShortcutStep = 101;
-            settings.SaveBrightnessAutomation();
-            Check(computer.BrightnessShortcutStep == 7 && settings.SettingsStatus.Contains("between"), "Invalid automation must leave saved settings untouched.");
+            settings.IsStartMinimized = true;
+            settings.IsMinimizeToTray = true;
+            var savedPreferences = data.Load().Value;
+            Check(savedPreferences.IsStartMinimized && savedPreferences.IsMinimizeToTray,
+                "Settings switches must write immediately without a Save action.");
+            settings.IsStartMinimized = false;
+            Check(!data.Load().Value.IsStartMinimized, "Turning a setting off must also save immediately.");
 
             var blocked = Path.Combine(directory, "blocked");
             File.WriteAllText(blocked, "sentinel");
             var blockedData = new DataController(blocked, Path.Combine(directory, "missing-legacy.json"));
             var blockedSettings = new SettingsViewModel(computer, new RegistryController(), blockedData);
-            blockedSettings.BrightnessShortcutStep = 9;
-            blockedSettings.SaveBrightnessAutomation();
-            Check(computer.BrightnessShortcutStep == 7 && blockedSettings.SettingsStatus.Contains("Could not save"), "Failed saves must roll back automation fields.");
-            blockedSettings.IsStartMinimized = !computer.IsStartMinimized;
-            Check(!computer.IsStartMinimized, "Failed option saves must restore their old values.");
-            var blockedPersistence = new BrightnessPersistenceController(blockedData, cache, hardware, logger);
-            blockedPersistence.Attach(computer);
-            try { blockedPersistence.IsLinked = false; throw new InvalidOperationException("Expected failed link save"); }
-            catch (IOException) { count++; }
-            Check(computer.IsBrightnessLinked, "Failed link preference saves must restore their old values.");
-            persistence.Detach();
-            persistence.IsLinked = false;
-            Check(computer.IsBrightnessLinked, "Detached persistence must not modify the old link preference.");
+            blockedSettings.IsStartMinimized = true;
+            Check(!computer.IsStartMinimized && blockedSettings.SettingsStatus.Contains("Could not save"),
+                "Failed option saves must restore their old values and report the error.");
         }
         finally
         {

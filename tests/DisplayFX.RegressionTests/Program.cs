@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using System.IO;
 using DisplayFX.Global.Controllers;
@@ -12,11 +13,17 @@ internal static class Program
     {
         try
         {
+            if (args.Length == 1 && args[0] == "--identify-map")
+            {
+                var map = typeof(MonitorIdentificationService).GetMethod("ReadWindowsNumbers", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, null);
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(map));
+                return 0;
+            }
             if (args.Length == 1 && args[0] == "--diagnose-brightness")
                 return BrightnessDiagnostics.Run();
             if (args.Length == 1 && args[0] == "--diagnose-hardware")
                 return HardwareCapabilityDiagnostics.Run();
-            var count = StorageChecks() + TrayChecks() + ColorTransactionChecks();
+            var count = StartupDependencyChecks() + StorageChecks() + TrayChecks() + ColorTransactionChecks();
             count += BrightnessRegressionChecks.Run();
             count += ProfileRegressionChecks.Run();
             count += AppProfileRegressionChecks.Run();
@@ -38,6 +45,20 @@ internal static class Program
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static int StartupDependencyChecks()
+    {
+        // Validate the real application graph without launching the app or touching hardware.
+        var registrations = new ServiceCollection();
+        var configure = typeof(DisplayFX.Bootstrap.Bootstrapper).GetMethod("ConfigureServices",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        configure.Invoke(null, new object[] { registrations });
+        using var provider = registrations.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true });
+        // The removed brightness automation must not be brought back to satisfy an obsolete constructor.
+        if (registrations.Any(service => service.ServiceType == typeof(BrightnessAutomationController)))
+            throw new InvalidOperationException("Removed brightness shortcuts must not be registered at startup.");
+        return 2;
     }
 
     private static int StorageChecks()
@@ -73,15 +94,10 @@ internal static class Program
 
             computer.IsStartMinimized = true;
             data.Write(computer);
-            Check(File.Exists(data.BackupPath), "Replacing settings must retain the previous save.");
-            File.WriteAllText(data.DataPath, "{truncated");
-            var recovered = data.Load();
-            Check(recovered.IsSuccess && !recovered.Value.IsStartMinimized, "Corrupt settings must recover the previous save.");
-            Check(Directory.GetFiles(Path.GetDirectoryName(data.DataPath)!, "*.corrupt-*").Length == 1,
-                "Recovery must preserve the damaged file.");
-            Check(data.Load().IsSuccess && File.Exists(data.BackupPath), "Recovery must leave usable primary and backup files.");
-            Check(Directory.GetFiles(Path.GetDirectoryName(data.DataPath)!, "*.tmp").Length == 0,
-                "Atomic saves must clean temporary files.");
+            Check(data.Load().Value.IsStartMinimized, "Replacing settings must keep the new primary state.");
+            var storedFiles = Directory.GetFiles(Path.GetDirectoryName(data.DataPath)!);
+            Check(storedFiles.Length == 1 && storedFiles[0] == data.DataPath, "Normal saves must not create backups or history.");
+            Check(Directory.GetDirectories(Path.GetDirectoryName(data.DataPath)!).Length == 0, "Normal saves must not create a backup directory.");
 
             var broken = new DataController(Path.Combine(fixtures, "broken"), legacyPath);
             Directory.CreateDirectory(Path.GetDirectoryName(broken.DataPath)!);
@@ -99,13 +115,13 @@ internal static class Program
             Check(migrated.Load().IsSuccess && File.Exists(migrated.DataPath), "Legacy settings must import on first launch.");
             Check(File.ReadAllText(legacyPath) == originalLegacy, "Migration must preserve the original legacy file.");
             File.WriteAllText(legacyPath, "{broken legacy");
-            Check(migrated.Load().IsSuccess, "An existing per-user save must take precedence over legacy data.");
+            Check(migrated.Load().IsSuccess, "An existing working state must take precedence over legacy data.");
             var badMigration = new DataController(Path.Combine(fixtures, "bad-migration"), legacyPath);
             Check(badMigration.Load().IsFailed && badMigration.HasSavedData && !File.Exists(badMigration.DataPath),
                 "Corrupt legacy settings must not be silently replaced with defaults.");
 
             File.Delete(data.DataPath);
-            Check(data.Load().IsSuccess && File.Exists(data.DataPath), "Missing primary settings must recover a valid backup.");
+            Check(data.Load().IsFailed, "No backup should be created to recover a deliberately deleted primary state.");
 
             // Old releases wrote null parent references and sometimes left no active profile.
             File.WriteAllText(broken.DataPath,

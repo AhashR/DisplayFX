@@ -10,6 +10,11 @@ public partial class MonitorView : UserControl
         InitializeComponent();
     }
 
+    private void OnMonitorClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MonitorViewModel monitor) monitor.IsSelected = true;
+    }
+
     private void OnSaveNameClick(object sender, RoutedEventArgs e)
     {
         if (DataContext is MonitorViewModel monitor)
@@ -21,4 +26,10 @@ public partial class MonitorView : UserControl
         if (DataContext is MonitorViewModel monitor)
             monitor.ClearCustomName();
     }
+}
+
+// A selected monitor is a tab, not an on/off switch.
+public sealed class MonitorTabButton : System.Windows.Controls.Primitives.ToggleButton
+{
+    protected override void OnToggle() { }
 }

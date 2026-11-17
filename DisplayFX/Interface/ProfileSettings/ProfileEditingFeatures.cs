@@ -26,10 +26,26 @@ public partial class ProfileSettingViewModel
         else _invalidInputs[key] = raw;
         NotifyOfPropertyChange(key); Publish();
     }
-    public double RedGain { get => ProfileSetting.RedGain; set { if (!double.IsFinite(value) || value is < 0 or > 1 || value == RedGain) return; TrackColorEdit(); ProfileSetting.RedGain = value; NotifyOfPropertyChange(); Publish(); } }
-    public double GreenGain { get => ProfileSetting.GreenGain; set { if (!double.IsFinite(value) || value is < 0 or > 1 || value == GreenGain) return; TrackColorEdit(); ProfileSetting.GreenGain = value; NotifyOfPropertyChange(); Publish(); } }
-    public double BlueGain { get => ProfileSetting.BlueGain; set { if (!double.IsFinite(value) || value is < 0 or > 1 || value == BlueGain) return; TrackColorEdit(); ProfileSetting.BlueGain = value; NotifyOfPropertyChange(); Publish(); } }
-    public int TemperatureKelvin { get => ProfileSetting.TemperatureKelvin; set { if (value is < 2500 or > 10000 || value == TemperatureKelvin) return; TrackColorEdit(); ProfileSetting.TemperatureKelvin = value; NotifyOfPropertyChange(); Publish(); } }
+    public bool TrySetExactColorValue(string channel, string text)
+    {
+        var gamma = channel == nameof(Gamma);
+        text = text.Trim();
+        if (!gamma && text.EndsWith('%')) text = text[..^1].TrimEnd();
+        if ((!double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) &&
+             !double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value)) ||
+            !double.IsFinite(value) || value < (gamma ? .4 : 0) || value > (gamma ? 2.8 : 100))
+            return false;
+        switch (channel)
+        {
+            case nameof(Brightness): Brightness = value / 100; break;
+            case nameof(Contrast): Contrast = value / 100; break;
+            case nameof(DigitalVibrance): DigitalVibrance = value / 100; break;
+            case nameof(Gamma): Gamma = value; break;
+            default: return false;
+        }
+        return true;
+    }
+
     private ProfileSetting SnapshotColors() => ProfileSetting.Copy();
     private void TrackColorEdit()
     {
@@ -56,7 +72,7 @@ public partial class ProfileSettingViewModel
     public void ApplyColorSnapshot(ProfileSetting snapshot)
     {
         _resetting = true;
-        try { Brightness = snapshot.Brightness; Contrast = snapshot.Contrast; Gamma = snapshot.Gamma; DigitalVibrance = snapshot.DigitalVibrance; RedGain = snapshot.RedGain; GreenGain = snapshot.GreenGain; BlueGain = snapshot.BlueGain; TemperatureKelvin = snapshot.TemperatureKelvin; _invalidInputs.Clear(); }
+        try { Brightness = snapshot.Brightness; Contrast = snapshot.Contrast; Gamma = snapshot.Gamma; DigitalVibrance = snapshot.DigitalVibrance; _invalidInputs.Clear(); }
         finally { _resetting = false; }
         Publish();
     }

@@ -99,12 +99,14 @@ internal static class MonitorFeatureRegressionChecks
             PlatformProvider.Current = previousPlatformProvider;
         }
 
-        var getNumber = typeof(MonitorIdentificationService).GetMethod("GetDisplayNumber", BindingFlags.NonPublic | BindingFlags.Static)!;
-        int Number(string screenName, int fallback) => (int)getNumber.Invoke(null, new object[] { screenName, fallback })!;
-        Check(Number(@"\\.\DISPLAY3", 1) == 3 && Number(@"\\.\display12", 1) == 12,
-            "Identification numbers must match Windows screen names independent of letter case.");
-        Check(Number("unrecognized", 2) == 2 && Number(@"\\.\DISPLAY0", 2) == 2 && Number(@"\\.\DISPLAY2147483648", 2) == 2,
-            "Malformed or unavailable Windows screen numbers must use a safe fallback.");
+        var type = typeof(MonitorIdentificationService);
+        var build = type.GetMethod("BuildDisplayLabels", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var get = type.GetMethod("GetDisplayLabel", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var labels = build.Invoke(null, new object[] { new[] { @"\\.\DISPLAY3", @"\\.\DISPLAY4", @"\\.\DISPLAY3" } })!;
+        string Label(string name) => (string)get.Invoke(null, new object[] { labels, name })!;
+        Check(Label(@"\\.\display3") == "1|3" && Label(@"\\.\DISPLAY4") == "2",
+            "Windows identify numbers must use active path order, with clone numbers sharing an overlay.");
+        Check(Label(@"\\.\DISPLAY99") == "", "Unknown outputs should show the monitor name without an invented number.");
         return checks;
     }
 

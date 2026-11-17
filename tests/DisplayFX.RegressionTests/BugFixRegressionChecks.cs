@@ -127,7 +127,44 @@ internal static class BugFixRegressionChecks
         var persistence = new BrightnessPersistenceController(data, cache, hardware, Logger);
         persistence.Attach(computer);
 
+        hardware.Levels["first"] = 43;
+        hardware.Levels["second"] = 100;
+        hardware.ExternalStatus(second, 100);
+        BrightnessFeatureRegressionChecks.Pump(async () =>
+        {
+            // Hold the first hardware query to prove that rows come from the known
+            // display snapshot and closing does not wait for an in-flight read.
+            using var started = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            hardware.BeforeRead = () => { started.Set(); release.Wait(TimeSpan.FromSeconds(5)); };
+            using var deferred = new BrightnessFlyoutViewModel(hardware, cache, persistence);
+            var seed = typeof(BrightnessFlyoutViewModel).GetMethod("SeedConnectedDisplays", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var initialDisplays = new Display[] { first, second };
+            seed.Invoke(deferred, new object[] { initialDisplays });
+            seed.Invoke(deferred, new object[] { initialDisplays });
+            try
+            {
+                Verify(deferred.Monitors.Count == 2 && deferred.Monitors[1].BrightnessText == "100%",
+                    "Opening must use the known display list and last successful brightness before reads finish.");
+                if (!await Task.Run(() => started.Wait(5000))) throw new TimeoutException("The deferred brightness read did not start.");
+                Verify(deferred.Monitors.All(row => !row.HasError && row.StatusMessage.Length == 0),
+                    "Pending first reads must not show a transient warning, including unknown values.");
+                Verify(deferred.FlushPendingBrightnessAsync().IsCompletedSuccessfully,
+                    "Closing a popup with no brightness edits must not wait for slow monitor reads.");
+            }
+            finally { release.Set(); hardware.BeforeRead = null; }
+            await deferred.Initialization;
+        });
+
         hardware.Readable = false;
+        BrightnessFeatureRegressionChecks.Pump(async () =>
+        {
+            using var row = new BrightnessMonitorViewModel(first, hardware, name: "Read failure", deferInitialization: true);
+            Verify(!row.HasError, "A pending read is not an error.");
+            for (var attempt = 0; attempt < 100 && !row.HasError; attempt++) await Task.Delay(10);
+            Verify(row.HasError && row.StatusMessage.Contains("cannot be read") && row.SupportsBrightness,
+                "A completed read failure must still show a warning and preserve usable writes.");
+        });
         using (var row = new BrightnessMonitorViewModel(first, hardware, name: "Write only"))
         {
             BrightnessFeatureRegressionChecks.Pump(() => row.RefreshBrightnessAsync());
@@ -238,45 +275,16 @@ internal static class BugFixRegressionChecks
             "Detach must discard queued requests and prevent a stale in-flight completion from persisting.");
 
         automation.Attach(computer);
-        var day = new DateTime(2026, 10, 15);
-        automation.Now = day.AddHours(7);
-        computer.IsBrightnessScheduleEnabled = true;
-        computer.BrightnessSchedules = new() { new() { Time = "08:00", Brightness = 80 }, new() { Time = "20:00", Brightness = 20 } };
-        automation.Start();
-        hardware.Writes.Clear();
-        hardware.NotifyDisplayPower(false);
-        automation.Now = day.AddHours(9); automation.Tick();
-        automation.Now = day.AddHours(21); automation.Tick();
-        Verify(hardware.Writes.Count == 0, "Schedules due during display sleep must not write sleeping hardware.");
-        BrightnessFeatureRegressionChecks.Pump(async () =>
-        {
-            hardware.NotifyDisplayPower(true);
-            await Dispatcher.CurrentDispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
-            await automation.PendingWork;
-        });
-        Verify(hardware.Writes.Select(write => write.Level).SequenceEqual(new[] { 20 }),
-            "Wake must immediately apply only the latest due schedule without waiting for the next daily occurrence.");
-        BrightnessFeatureRegressionChecks.Pump(async () => { automation.Tick(); await automation.PendingWork; });
-        Verify(hardware.Writes.Count == 1, "Subsequent ticks must not repeat the recovered schedule.");
-        hardware.NotifyDisplayPower(false);
-        automation.Now = day.AddDays(1).AddHours(9); automation.Tick();
-        computer.IsBrightnessScheduleEnabled = false;
-        automation.SettingsChanged();
-        BrightnessFeatureRegressionChecks.Pump(async ()
-            => { hardware.NotifyDisplayPower(true); await Dispatcher.CurrentDispatcher.InvokeAsync(() => { }, DispatcherPriority.Background); await automation.PendingWork; });
-        Verify(hardware.Writes.Count == 1, "Disabling a schedule during sleep must cancel catch-up.");
-
         computer.IsBrightnessShortcutsEnabled = true;
         automation.FailRegistration = true;
-        automation.RefreshHotkeys();
-        var settings = new SettingsViewModel(computer, new RegistryController(), data, automation);
-        Verify(settings.HasShortcutError && settings.ShortcutStatus.Contains("another app"), "Native registration failures must reach Settings.");
+        automation.Start();
+        Verify(automation.ShortcutError != null && automation.ShortcutStatus.Contains("another app"), "Native registration failures must be retained by the legacy controller.");
         automation.SuspendHotkeys(true);
-        Verify(settings.HasShortcutError && settings.ShortcutStatus.Contains("another app"),
-            "Opening Settings and temporarily releasing hotkeys must not erase the previous failure.");
+        Verify(automation.ShortcutError != null && automation.ShortcutStatus.Contains("another app"),
+            "Temporarily releasing hotkeys must not erase the previous failure.");
         automation.FailRegistration = false;
         automation.SuspendHotkeys(false);
-        Verify(!settings.HasShortcutError && automation.ShortcutError == null, "A successful retry must clear obsolete registration feedback.");
+        Verify(automation.ShortcutError == null, "A successful retry must clear obsolete registration feedback.");
         return count;
     }
 
@@ -303,11 +311,16 @@ internal static class BugFixRegressionChecks
         public readonly ConcurrentQueue<(string Path, int Level)> Writes = new();
         public bool Readable = true;
         public Action? BeforeWrite;
+        public Action? BeforeRead;
         public Action? AfterWrite;
         public int WriteThread;
         private int _concurrent;
         public int MaxConcurrentWrites;
-        public override int? GetBrightness(Display display) => Readable ? Levels[display.DevicePath] : null;
+        public override int? GetBrightness(Display display)
+        {
+            BeforeRead?.Invoke();
+            return Readable ? Levels[display.DevicePath] : null;
+        }
         public override bool SupportsBrightness(Display display) => !IsDisplaySleeping;
         public override bool SetBrightness(Display display, int brightness)
         {

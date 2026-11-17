@@ -32,6 +32,10 @@ internal static class AppProfileRegressionChecks
             return true;
         }
         void Focus(string? app) => switching.Update(app, computer.Monitors, Apply);
+        manual.LinkedExecutablePath = @"C:\Games\game.exe"; // Legacy default links must remain inert.
+        Check(!AppProfileSwitchingController.MatchesProfile(manual, game.LinkedExecutablePath) &&
+            ProfileTransferController.GetExecutableConflict(game) == null,
+            "A hidden link on Default must not trigger a switch or block a custom profile.");
         Focus(@"C:\Games\game.exe");
         Check(game.IsActive && manual.IsActiveBeforeAutomaticSwitch == true && other.Profiles[0].IsActive,
             "A linked executable changes only its monitor and retains its manual baseline.");

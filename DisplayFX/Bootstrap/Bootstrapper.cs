@@ -63,7 +63,6 @@ public class Bootstrapper : BootstrapperBase
 
     public Bootstrapper()
     {
-        LoggingController.Configure();
         try
         {
             SetCurrentProcessExplicitAppUserModelID("DisplayFX.App");
@@ -89,7 +88,6 @@ public class Bootstrapper : BootstrapperBase
         services.AddSingleton<ProcessController>();
         services.AddSingleton<AppProfileSwitchingController>();
         services.AddSingleton<BrightnessPersistenceController>();
-        services.AddSingleton<BrightnessAutomationController>();
         services.AddSingleton<MonitorTopologyController>();
         services.AddSingleton<MonitorIdentificationService>();
         services.AddSingleton<DisplayController>();
@@ -114,8 +112,6 @@ public class Bootstrapper : BootstrapperBase
 
     private ComputerFactory _computerFactory => _serviceProvider.GetRequiredService<ComputerFactory>();
     private DataController _dataController => _serviceProvider.GetRequiredService<DataController>();
-    private BrightnessPersistenceController _brightnessPersistenceController =>
-        _serviceProvider.GetRequiredService<BrightnessPersistenceController>();
     private ILogger _fileLogger => _serviceProvider.GetRequiredService<ILogger>();
 
     protected override void BuildUp(object instance)
@@ -145,7 +141,6 @@ public class Bootstrapper : BootstrapperBase
             if (TryLoad().IsFailed)
                 return;
 
-            _brightnessPersistenceController.RestoreOnStartup();
             await DisplayRootViewForAsync<ShellViewModel>();
             _fileLogger.Info("Loaded root.");
             TrimMemory();

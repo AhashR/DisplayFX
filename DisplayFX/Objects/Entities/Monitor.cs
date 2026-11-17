@@ -18,12 +18,7 @@ public class Monitor
     public string? HardwareIdentity { get; set; }
     public string Name { get; private set; }
     public string? CustomName { get; set; }
-    public bool IsFavorite { get; set; }
     public System.Guid? ReferenceProfileId { get; set; }
-    public string BrightnessGroup { get; set; } = "";
-    public int BrightnessOffset { get; set; }
-    public int MinimumBrightness { get; set; }
-    public int MaximumBrightness { get; set; } = 100;
     [JsonIgnore]
     public string DisplayName => string.IsNullOrWhiteSpace(CustomName) ? Name : CustomName.Trim();
     public Size Resolution { get; private set; }

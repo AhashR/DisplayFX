@@ -1,62 +1,53 @@
-<Window FontSize="{DynamicResource ContentFontSize}" x:Class="DisplayFX.Interface.Shell.ShellView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:cm="http://caliburnmicro.com" MinHeight="480" MinWidth="620" Width="820" Height="760" WindowStartupLocation="CenterScreen" ResizeMode="CanResize" WindowStyle="SingleBorderWindow" Style="{x:Null}" Title="{Binding DisplayName}" Icon="pack://application:,,,/DisplayFX;component/Resources/desktop.png" Background="{DynamicResource WindowBackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderThickness="1" BorderBrush="{DynamicResource BorderColorBrush}">
+<Window FontSize="{DynamicResource ContentFontSize}" x:Class="DisplayFX.Interface.Shell.ShellView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:cm="http://caliburnmicro.com" MinHeight="420" MinWidth="600" Width="790" FontFamily="Segoe UI" Language="en-GB" UseLayoutRounding="True" SizeToContent="Height" WindowStartupLocation="CenterScreen" ResizeMode="CanResize" WindowStyle="SingleBorderWindow" Style="{x:Null}" Title="DisplayFX" Icon="pack://application:,,,/DisplayFX;component/Resources/desktop.png" Background="{DynamicResource WindowBackgroundBrush}" Foreground="{DynamicResource TextPrimaryBrush}" BorderThickness="1" BorderBrush="{DynamicResource BorderColorBrush}">
     <Window.Resources><BooleanToVisibilityConverter x:Key="BoolVisibility" /></Window.Resources>
-    <Grid Margin="20">
-        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-        <Grid Margin="0,0,0,20">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                <ItemsControl ItemsSource="{Binding VisibleMonitors}">
-                    <ItemsControl.ItemTemplate><DataTemplate><ContentControl cm:View.Model="{Binding}" IsTabStop="False" /></DataTemplate></ItemsControl.ItemTemplate>
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                </ItemsControl>
-            </ScrollViewer>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0">
-                <Button Name="IdentifyMonitors" Content="" Style="{DynamicResource IconButtonStyle}" IsEnabled="{Binding CanIdentifyMonitors}" ToolTip="{DynamicResource UiTextD5E2BA51BF04}" AutomationProperties.Name="{DynamicResource UiTextD5E2BA51BF04}" />
-                <Button Name="RefreshMonitors" Content="" Style="{DynamicResource IconButtonStyle}" ToolTip="{DynamicResource UiTextD28CEE938975}" AutomationProperties.Name="{DynamicResource UiTextD28CEE938975}" />
-                <Button Name="OpenSettings" Content="" Style="{DynamicResource IconButtonStyle}" ToolTip="{DynamicResource UiText74A883A037BC}" AutomationProperties.Name="{DynamicResource UiText74A883A037BC}" />
-                <Button Name="OpenWorkspace" Content="" Style="{DynamicResource IconButtonStyle}" ToolTip="{DynamicResource UiText87BB59BA2F92}" AutomationProperties.Name="{DynamicResource UiText87BB59BA2F92}" />
-            </StackPanel>
-        </Grid>
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="172" /><ColumnDefinition Width="20" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-            <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                <Grid Margin="0,0,0,8">
-                    <TextBlock Text="{DynamicResource UiText535E52E4A261}" FontSize="{DynamicResource ContentFontSize}" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
-                    <Button Name="ImportProfile" Content="" Style="{DynamicResource IconButtonStyle}" HorizontalAlignment="Right" Margin="0,0,36,0" IsEnabled="{Binding CanImportProfile}" ToolTip="{DynamicResource UiTextF2F82EB58EA6}" AutomationProperties.Name="{DynamicResource UiTextF2F82EB58EA6}" />
-                    <Button Name="AddProfile" Content="" Style="{DynamicResource IconButtonStyle}" HorizontalAlignment="Right" IsEnabled="{Binding CanAddProfile}" ToolTip="{DynamicResource UiTextFCF4F3F4D5F7}" AutomationProperties.Name="{DynamicResource UiTextFCF4F3F4D5F7}" />
-                </Grid>
-                <TextBox Grid.Row="1" Text="{Binding ProfileSearch, UpdateSourceTrigger=PropertyChanged}" ToolTip="{DynamicResource UiTextF37DEB7771E6}" AutomationProperties.Name="{DynamicResource UiTextF37DEB7771E6}" Margin="0,0,0,8" Padding="8,6" />
-                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="700">
-                <ItemsControl ItemsSource="{Binding VisibleProfiles}">
-                    <ItemsControl.ItemTemplate><DataTemplate><ContentControl cm:View.Model="{Binding}" IsTabStop="False" /></DataTemplate></ItemsControl.ItemTemplate>
-                </ItemsControl>
+    <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="188" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Border x:Name="NavigationRail" Background="{DynamicResource SidebarBackgroundBrush}" BorderBrush="{DynamicResource BorderColorBrush}" BorderThickness="0,0,1,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="10,14,10,12">
+                        <TextBlock Text="Displays" FontWeight="SemiBold" Margin="8,0,0,6" />
+                        <ItemsControl x:Name="DisplayNavigation" ItemsSource="{Binding VisibleMonitors}">
+                            <ItemsControl.ItemTemplate><DataTemplate><ContentControl cm:View.Model="{Binding}" IsTabStop="False" /></DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Grid Margin="8,15,0,4">
+                            <TextBlock Text="{DynamicResource UiText535E52E4A261}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Button Name="AddProfile" Content="" Style="{DynamicResource FluentIconButtonStyle}" HorizontalAlignment="Right"
+                                    IsEnabled="{Binding CanAddProfile}" ToolTip="{DynamicResource UiTextFCF4F3F4D5F7}" AutomationProperties.Name="Add profile" />
+                        </Grid>
+                        <ItemsControl x:Name="ProfileNavigation" ItemsSource="{Binding VisibleProfiles}">
+                            <ItemsControl.ItemTemplate><DataTemplate><ContentControl cm:View.Model="{Binding}" IsTabStop="False" /></DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </ScrollViewer>
-            </Grid>
-            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <ContentControl cm:View.Model="{Binding SelectedProfile.ProfileSettings}" IsTabStop="False" />
+            </Border>
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="18,14,18,16" x:Name="EditorPane">
+                    <TextBlock x:Name="SelectedDisplayName" Text="{Binding SelectedMonitor.Name}" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="SelectedProfileHeading" Text="{Binding SelectedProfile.Name, TargetNullValue=Display settings}" FontSize="26" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,1,0,9" />
+                    <ContentControl cm:View.Model="{Binding SelectedProfile.ProfileSettings}" IsTabStop="False" />
+                </StackPanel>
             </ScrollViewer>
         </Grid>
-        <Grid Grid.Row="2" Margin="0,18,0,0">
-            <TextBlock Text="{DynamicResource UiTextA710C2B90913}" FontSize="{DynamicResource ContentFontSize}" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Visibility="{Binding ProfileSettingsIsDirty, Converter={StaticResource BoolVisibility}}" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <TextBlock Text="{Binding StatusIcon}" FontFamily="Segoe MDL2 Assets" Foreground="{Binding StatusBrush}" VerticalAlignment="Center" Margin="0,0,10,0" Padding="6" Background="Transparent" Visibility="{Binding HasOperationStatus, Converter={StaticResource BoolVisibility}}" ToolTip="{Binding OperationStatus}" />
-                <Button Name="Revert" Content="{Binding RevertActionLabel}" Style="{DynamicResource DarkThemeButtonStyle}" IsEnabled="{Binding ProfileSettingsIsDirty}" ToolTip="{DynamicResource UiText80DCF958AA50}" AutomationProperties.Name="{DynamicResource UiText80DCF958AA50}" Margin="0,0,6,0" />
-                <Button Name="Apply" Content="{Binding ApplyActionLabel}" Style="{DynamicResource DarkThemeButtonStyle}" IsEnabled="{Binding CanApply}" ToolTip="{DynamicResource UiTextF1BB69715A57}" AutomationProperties.Name="{DynamicResource UiTextEDA00DF0A060}" Margin="0,0,6,0" />
-                <Button Name="Update" Content="{Binding SaveActionLabel}" Style="{DynamicResource PrimaryAccentButtonStyle}" IsEnabled="{Binding ProfileSettingsIsDirty}" ToolTip="{DynamicResource UiText0C8209E72EC8}" AutomationProperties.Name="{DynamicResource UiText0C8209E72EC8}" />
+        <Border Grid.Row="1" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource BorderColorBrush}" Background="{DynamicResource SidebarBackgroundBrush}">
+            <Grid Margin="9,7">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal">
+                <Button Name="IdentifyMonitors" AutomationProperties.Name="Identify displays" Content="" Style="{DynamicResource FluentIconButtonStyle}" IsEnabled="{Binding CanIdentifyMonitors}" ToolTip="{DynamicResource UiTextD5E2BA51BF04}" />
+                <Button Name="RefreshMonitors" AutomationProperties.Name="Refresh displays" Content="" Style="{DynamicResource FluentIconButtonStyle}" ToolTip="{DynamicResource UiTextD28CEE938975}" />
+                <Button Name="OpenSettings" AutomationProperties.Name="Settings" Content="" Style="{DynamicResource FluentIconButtonStyle}" ToolTip="{DynamicResource UiText74A883A037BC}" />
             </StackPanel>
-        </Grid>
-        <StackPanel Grid.Row="3">
-        <WrapPanel Margin="0,8,0,0">
-         <Button Name="PreviewProfile" Content="{DynamicResource UiText5AABCBD14944}" IsEnabled="{Binding CanApply}" Style="{DynamicResource DarkThemeButtonStyle}" Margin="0,0,6,6" />
-         <Button Name="KeepPreview" Content="{DynamicResource UiText4DE0B0E0F8B9}" Visibility="{Binding HasPreview, Converter={StaticResource BoolVisibility}}" Style="{DynamicResource DarkThemeButtonStyle}" Margin="0,0,6,6" />
-         <Button Name="CancelPreview" Content="{DynamicResource UiTextF657ED08C403}" Visibility="{Binding HasPreview, Converter={StaticResource BoolVisibility}}" Style="{DynamicResource DarkThemeButtonStyle}" Margin="0,0,6,6" />
-         <Button Name="RestoreOriginal" Content="{DynamicResource UiTextF61AA62D87C4}" Style="{DynamicResource DarkThemeButtonStyle}" Margin="0,0,6,6" />
-         <Button Content="{DynamicResource UiTextCDC562D6AE15}" PreviewMouseLeftButtonDown="Compare_Down" PreviewMouseLeftButtonUp="Compare_Up" LostMouseCapture="Compare_LostCapture" PreviewKeyDown="Compare_KeyDown" PreviewKeyUp="Compare_KeyUp" Style="{DynamicResource DarkThemeButtonStyle}" Margin="0,0,6,6" AutomationProperties.HelpText="{DynamicResource UiText6B82A6C312A4}" />
-        </WrapPanel>
-        <TextBlock Text="{Binding PreviewLabel}" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
-        <TextBlock Text="{Binding ApplyingText}" Margin="0,6,0,0" Foreground="{DynamicResource TextMutedBrush}" AutomationProperties.LiveSetting="Polite" />
-        <TextBlock Text="{Binding OperationStatus}" TextWrapping="Wrap" Margin="0,10,0,0" AutomationProperties.LiveSetting="Polite" Foreground="{DynamicResource TextMutedBrush}" FontSize="{DynamicResource ContentFontSize}" Visibility="{Binding HasOperationStatus, Converter={StaticResource BoolVisibility}}" />
-        </StackPanel>
+                <TextBlock Grid.Column="1" Text="{DynamicResource UiTextA710C2B90913}" Foreground="{DynamicResource TextMutedBrush}"
+                           TextTrimming="CharacterEllipsis" Margin="8,0" VerticalAlignment="Center"
+                           Visibility="{Binding ProfileSettingsIsDirty, Converter={StaticResource BoolVisibility}}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <TextBlock Text="{Binding StatusIcon}" FontFamily="Segoe MDL2 Assets" Foreground="{Binding StatusBrush}" VerticalAlignment="Center" Margin="0,0,10,0" Padding="6" Background="Transparent" Visibility="{Binding HasOperationStatus, Converter={StaticResource BoolVisibility}}" ToolTip="{Binding OperationStatus}" />
+                <Button Name="Revert" Content="{Binding RevertActionLabel}" Style="{DynamicResource FluentButtonStyle}" IsEnabled="{Binding ProfileSettingsIsDirty}" ToolTip="{DynamicResource UiText80DCF958AA50}" Margin="0,0,6,0" />
+                <Button Name="Apply" MinWidth="74" Content="{Binding ApplyActionLabel}" Style="{DynamicResource FluentButtonStyle}" IsEnabled="{Binding CanApply}" ToolTip="{DynamicResource UiTextF1BB69715A57}" Margin="0,0,6,0" />
+                <Button Name="Update" Content="{Binding SaveActionLabel}" Style="{DynamicResource FluentPrimaryButtonStyle}" IsEnabled="{Binding CanSave}" ToolTip="{DynamicResource UiText0C8209E72EC8}" />
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

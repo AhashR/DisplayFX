@@ -50,7 +50,6 @@ public partial class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         ProfileSetting.Contrast != _originalSettings.Contrast ||
         ProfileSetting.Gamma != _originalSettings.Gamma ||
         ProfileSetting.DigitalVibrance != _originalSettings.DigitalVibrance ||
-        ProfileSetting.RedGain != _originalSettings.RedGain || ProfileSetting.GreenGain != _originalSettings.GreenGain || ProfileSetting.BlueGain != _originalSettings.BlueGain || ProfileSetting.TemperatureKelvin != _originalSettings.TemperatureKelvin ||
         _hotkeyModifiers != _originalHotkeyModifiers ||
         _hotkeyKey != _originalHotkeyKey ||
         !string.Equals(_linkedExecutablePath, _originalExecutablePath, StringComparison.OrdinalIgnoreCase);
@@ -83,7 +82,7 @@ public partial class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         get
         {
             if (IsRecordingHotkey)
-                return DisplayFX.Global.Controllers.LocalizationController.Instance["Press key combination..."];
+                return "Press key combination...";
 
             return FormatHotkey(_hotkeyModifiers, _hotkeyKey);
         }
@@ -92,7 +91,7 @@ public partial class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
     public static string FormatHotkey(ModifierKeys? modifiers, Key? key)
     {
         if (!key.HasValue || key.Value == Key.None)
-            return DisplayFX.Global.Controllers.LocalizationController.Instance["Click to record shortcut"];
+            return "Click to record shortcut";
 
         var parts = new List<string>();
         if (modifiers.HasValue)
@@ -121,7 +120,7 @@ public partial class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
             parts.Add(keyName);
         }
 
-        return parts.Count > 0 ? string.Join(" + ", parts) : DisplayFX.Global.Controllers.LocalizationController.Instance["Click to record shortcut"];
+        return parts.Count > 0 ? string.Join(" + ", parts) : "Click to record shortcut";
     }
 
     public void SetRecordedHotkey(ModifierKeys? modifiers, Key key)
@@ -154,12 +153,26 @@ public partial class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         }
     }
     public string LinkedApplicationName => string.IsNullOrWhiteSpace(LinkedExecutablePath)
-        ? DisplayFX.Global.Controllers.LocalizationController.Instance["Link application"] : Path.GetFileNameWithoutExtension(LinkedExecutablePath);
+        ? "Link application" : Path.GetFileNameWithoutExtension(LinkedExecutablePath);
     private void BrowseExecutable()
     {
         var dialog = new OpenFileDialog { Filter = "Applications (*.exe)|*.exe", Title = "Link application" };
+        var folder = GetLinkedExecutableDirectory(LinkedExecutablePath);
+        if (folder != null) dialog.InitialDirectory = folder;
         if (dialog.ShowDialog() == true) LinkedExecutablePath = dialog.FileName;
     }
+    internal static string? GetLinkedExecutableDirectory(string? executable)
+    {
+        if (string.IsNullOrWhiteSpace(executable)) return null;
+        try
+        {
+            if (!Path.IsPathFullyQualified(executable)) return null;
+            var directory = Path.GetDirectoryName(executable);
+            return Directory.Exists(directory) ? directory : null;
+        }
+        catch (ArgumentException) { return null; }
+    }
+
     public double Brightness
     {
         get => ProfileSetting.Brightness;
@@ -223,7 +236,6 @@ public partial class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
             Contrast = _originalSettings.Contrast;
             Gamma = _originalSettings.Gamma;
             DigitalVibrance = _originalSettings.DigitalVibrance;
-            RedGain = _originalSettings.RedGain; GreenGain = _originalSettings.GreenGain; BlueGain = _originalSettings.BlueGain; TemperatureKelvin = _originalSettings.TemperatureKelvin;
             LinkedExecutablePath = _originalExecutablePath;
             _hotkeyModifiers = _originalHotkeyModifiers;
             _hotkeyKey = _originalHotkeyKey;
@@ -235,6 +247,13 @@ public partial class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         Publish();
 
         return Task.CompletedTask;
+    }
+
+    internal void ForgetRemovedShortcut()
+    {
+        _originalHotkeyKey = _hotkeyKey = null;
+        _originalHotkeyModifiers = _hotkeyModifiers = null;
+        Publish();
     }
 
     private void ClearHotkey()
@@ -316,7 +335,6 @@ public partial class ProfileSettingViewModel : Screen, IHandle<RevertEvent>
         target.Contrast = source.Contrast;
         target.Gamma = source.Gamma;
         target.DigitalVibrance = source.DigitalVibrance;
-        target.RedGain = source.RedGain; target.GreenGain = source.GreenGain; target.BlueGain = source.BlueGain; target.TemperatureKelvin = source.TemperatureKelvin;
     }
 }
 

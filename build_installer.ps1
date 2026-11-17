@@ -73,7 +73,7 @@ try {
     }
     & $DotNetPath publish (Join-Path $repoDirectory 'DisplayFX.Cli\DisplayFX.Cli.csproj') -c Release -r win-x64 --self-contained true --output $stagingDirectory -m:1 /p:UseSharedCompilation=false
     if ($LASTEXITCODE -ne 0) { throw "CLI publish failed with exit code $LASTEXITCODE." }
-    foreach ($localState in @('Data', 'Logs', 'History', 'portable.flag', 'Runtime.json')) {
+    foreach ($localState in @('Data', 'Settings', 'Logs', 'History', 'portable.flag', 'Runtime.json')) {
         if (Test-Path -LiteralPath (Join-Path $stagingDirectory $localState)) { throw "Local state must not be packaged: $localState" }
     }
     foreach ($file in @('DisplayFX.exe','DisplayFX.dll','WindowsDisplayAPI.dll','DisplayFX.Cli.exe','DisplayFX.Cli.dll')) { Sign-DisplayFXFile (Join-Path $stagingDirectory $file) }

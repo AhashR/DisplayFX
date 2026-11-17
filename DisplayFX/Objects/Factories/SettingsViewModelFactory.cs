@@ -1,3 +1,6 @@
+using System;
+using System.Threading.Tasks;
+using System.Windows;
 using DisplayFX.Global.Controllers;
 using DisplayFX.Interface.Settings;
 using DisplayFX.Objects.Entities;
@@ -9,18 +12,15 @@ public class SettingsViewModelFactory : ISettingsViewModelFactory
 {
     private readonly RegistryController _registryController;
     private readonly DataController _dataController;
-    private readonly BrightnessAutomationController _automation;
 
-    public SettingsViewModelFactory(RegistryController registryController, DataController dataController,
-        BrightnessAutomationController automation)
+    public SettingsViewModelFactory(RegistryController registryController, DataController dataController)
     {
         _registryController = registryController;
         _dataController = dataController;
-        _automation = automation;
     }
 
-    public SettingsViewModel Create(Computer computer)
+    public SettingsViewModel Create(Computer computer, Func<Window?, string?> import, Func<Window?, string?> export, Func<Task<string>> checkUpdates, Func<bool> canImport, Func<bool> canExport, Func<string> profileFileContext)
     {
-        return new SettingsViewModel(computer, _registryController, _dataController, _automation);
+        return new SettingsViewModel(computer, _registryController, _dataController, import, export, checkUpdates, canImport, canExport, profileFileContext);
     }
 }

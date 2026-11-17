@@ -1,8 +1,8 @@
-<UserControl x:Class="DisplayFX.Interface.Profiles.ProfileView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Margin="0,0,0,6" ContextMenu="{Binding ContextMenu}">
+<UserControl x:Class="DisplayFX.Interface.Profiles.ProfileView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Margin="0,0,0,3" ContextMenu="{Binding ContextMenu}">
  <UserControl.Resources><BooleanToVisibilityConverter x:Key="BoolVisibility" /></UserControl.Resources>
- <Button Style="{DynamicResource ProfileCardButtonStyle}" Click="ProfileCard_Click" ToolTip="{Binding Name}" AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{Binding AccessibleDescription}">
+ <Button Style="{DynamicResource FluentProfileNavStyle}" Click="ProfileCard_Click" ToolTip="{Binding Name}" AutomationProperties.Name="{Binding Name}">
   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-   <DockPanel><TextBlock Text="{Binding Icon}" Foreground="{Binding MarkerColor}" Margin="0,0,6,0" /><TextBlock Text="{Binding FavoriteMark}" Margin="0,0,4,0" /><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="{DynamicResource ContentFontSize}" /></DockPanel>
+   <DockPanel><TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource AccentBlueBrush}" Margin="0,0,6,0" /><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="{DynamicResource ContentFontSize}" /></DockPanel>
    <TextBlock Grid.Column="1" Text="" FontFamily="Segoe MDL2 Assets" Foreground="{DynamicResource AccentBlueBrush}" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="{Binding IsActive, Converter={StaticResource BoolVisibility}}" ToolTip="{DynamicResource UiText5608B89A8112}" />
   </Grid>
  </Button>

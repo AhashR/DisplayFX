@@ -13,9 +13,9 @@
         <Description>DisplayFX</Description>
         <Company>AhashR</Company>
         <Authors>AhashR</Authors>
-        <Version>2.2.0-preview.1</Version>
-        <AssemblyVersion>2.2.0.0</AssemblyVersion>
-        <FileVersion>2.2.0.0</FileVersion>
+        <Version>2.2.14</Version>
+        <AssemblyVersion>2.2.14.0</AssemblyVersion>
+        <FileVersion>2.2.14.0</FileVersion>
         <Title>DisplayFX</Title>
         <RepositoryUrl>https://github.com/AhashR/DisplayFX</RepositoryUrl>
         <EnableWindowsTargeting>true</EnableWindowsTargeting>

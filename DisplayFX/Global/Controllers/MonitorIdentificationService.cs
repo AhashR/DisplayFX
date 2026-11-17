@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using DisplayFX.Interface.Monitors;
 using NLog;
+using WindowsDisplayAPI.DisplayConfig;
 using FormsScreen = System.Windows.Forms.Screen;
 
 namespace DisplayFX.Global.Controllers;
@@ -29,6 +30,8 @@ public sealed class MonitorIdentificationService : IDisposable
     {
         Close();
         var connected = monitors.ToList();
+        var numbers = ReadWindowsNumbers();
+        var shown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < connected.Count; index++)
         {
             var monitor = connected[index];
@@ -36,9 +39,9 @@ public sealed class MonitorIdentificationService : IDisposable
             {
                 var screen = FormsScreen.AllScreens.FirstOrDefault(candidate =>
                     string.Equals(candidate.DeviceName, monitor.ScreenName, StringComparison.OrdinalIgnoreCase));
-                if (screen == null) continue;
+                if (screen == null || !shown.Add(screen.DeviceName)) continue;
 
-                var overlay = CreateOverlay(monitor.Name, GetDisplayNumber(screen.DeviceName, index + 1));
+                var overlay = CreateOverlay(monitor.Name, GetDisplayLabel(numbers, screen.DeviceName));
                 overlay.SourceInitialized += (_, _) =>
                 {
                     var handle = new WindowInteropHelper(overlay).Handle;
@@ -75,22 +78,32 @@ public sealed class MonitorIdentificationService : IDisposable
         _closeTimer.Start();
     }
 
-    internal static int GetDisplayNumber(string screenName, int fallback)
+    internal static Dictionary<string, string> ReadWindowsNumbers()
     {
-        const string prefix = @"\\.\DISPLAY";
-        return screenName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-               int.TryParse(screenName.Substring(prefix.Length), NumberStyles.None,
-                   CultureInfo.InvariantCulture, out var number) && number > 0
-            ? number
-            : fallback;
+        try
+        {
+            return BuildDisplayLabels(PathInfo.GetActiveGdiSourceNamesInPathOrder());
+        }
+        catch { return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); }
     }
 
-    private static Window CreateOverlay(string name, int number)
+    internal static Dictionary<string, string> BuildDisplayLabels(IEnumerable<string> pathOrder) =>
+        pathOrder.Select((screen, index) => (screen, number: index + 1))
+            .Where(item => !string.IsNullOrWhiteSpace(item.screen))
+            .GroupBy(item => item.screen, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key,
+                group => string.Join("|", group.Select(item => item.number.ToString(CultureInfo.InvariantCulture))),
+                StringComparer.OrdinalIgnoreCase);
+
+    internal static string GetDisplayLabel(IReadOnlyDictionary<string, string> numbers, string screen) =>
+        numbers.TryGetValue(screen, out var label) ? label : "";
+
+    private static Window CreateOverlay(string name, string number)
     {
         var panel = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(24, 14, 24, 18) };
-        panel.Children.Add(new TextBlock
+        if (number.Length > 0) panel.Children.Add(new TextBlock
         {
-            Text = number.ToString(CultureInfo.InvariantCulture), FontSize = 76, FontWeight = FontWeights.SemiBold,
+            Text = number, FontSize = 76, FontWeight = FontWeights.SemiBold,
             Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center
         });
         panel.Children.Add(new TextBlock

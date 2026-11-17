@@ -107,18 +107,6 @@ public partial class MonitorBrightnessController
             return SetBrightness(display, target) ? target : null;
         }
     }
-    public virtual int? AdjustBrightnessWithinLimits(Display display, long delta, int minimum, int maximum)
-    {
-        if (minimum == 0 && maximum == 100) return AdjustBrightness(display, delta);
-        var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());
-        lock (channel)
-        {
-            if (IsDisplaySleeping || GetBrightness(display) is not int current) return null;
-            var target = (int)Math.Clamp(current + delta, minimum, maximum);
-            return SetBrightness(display, target) ? target : null;
-        }
-    }
-
     public virtual bool SetBrightnessIfCurrent(Display display, int brightness, long expectedVersion)
     {
         var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());

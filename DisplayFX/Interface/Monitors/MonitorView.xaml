@@ -1,6 +1,6 @@
-<UserControl x:Class="DisplayFX.Interface.Monitors.MonitorView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:monitors="clr-namespace:DisplayFX.Interface.Monitors" mc:Ignorable="d" Margin="0,0,6,0" d:DesignHeight="36" d:DesignWidth="180" d:DataContext="{d:DesignInstance monitors:MonitorViewModel}">
-    <ToggleButton Style="{DynamicResource SegmentedTabToggleButtonStyle}" IsChecked="{Binding IsSelected}" ToolTip="{DynamicResource UiTextFB31CF5AD5E2}" AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{Binding ResolutionText}">
-        <ToggleButton.ContextMenu>
+<UserControl x:Class="DisplayFX.Interface.Monitors.MonitorView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:monitors="clr-namespace:DisplayFX.Interface.Monitors" mc:Ignorable="d" Margin="0,0,0,3" d:DesignHeight="36" d:DesignWidth="180" d:DataContext="{d:DesignInstance monitors:MonitorViewModel}">
+    <monitors:MonitorTabButton Style="{DynamicResource FluentMonitorNavStyle}" IsChecked="{Binding IsSelected, Mode=OneWay}" Click="OnMonitorClick" AutomationProperties.Name="{Binding Name}" ToolTip="{DynamicResource UiTextFB31CF5AD5E2}">
+        <monitors:MonitorTabButton.ContextMenu>
             <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                 <MenuItem Header="{DynamicResource UiText506033515391}">
                     <MenuItem StaysOpenOnClick="True">
@@ -16,12 +16,12 @@
                 </MenuItem>
                 <MenuItem Header="{DynamicResource UiText72DC3786A6C5}" Click="OnClearNameClick" />
             </ContextMenu>
-        </ToggleButton.ContextMenu>
-        <ToggleButton.Content>
-            <StackPanel Orientation="Horizontal">
+        </monitors:MonitorTabButton.ContextMenu>
+        <monitors:MonitorTabButton.Content>
+            <DockPanel LastChildFill="True">
                 <TextBlock Text="" FontFamily="Segoe MDL2 Assets" Margin="0,0,8,0" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" MaxWidth="180" FontSize="{DynamicResource ContentFontSize}" ToolTip="{Binding ResolutionText}" />
-            </StackPanel>
-        </ToggleButton.Content>
-    </ToggleButton>
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="{DynamicResource ContentFontSize}" ToolTip="{Binding ResolutionText}" />
+            </DockPanel>
+        </monitors:MonitorTabButton.Content>
+    </monitors:MonitorTabButton>
 </UserControl>
