@@ -672,6 +672,7 @@ public partial class ShellViewModel : Conductor<IScreen>, IHandle<ProfileSetting
         InitializeHotkeyManager(view);
         _monitorTopologyController.TopologyChanged += OnMonitorTopologyChanged;
         _monitorTopologyController.Start();
+        _ = _brightnessPersistenceController.RestoreOnStartupAsync();
         _appTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _appTimer.Tick += OnApplicationTick;
         _appTimer.Start();

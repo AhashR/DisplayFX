@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Windows.Input;
 using System.Windows.Threading;
 using System.Threading;
@@ -198,6 +199,49 @@ internal static class BrightnessFeatureRegressionChecks
             blockedSettings.IsStartMinimized = true;
             Check(!computer.IsStartMinimized && blockedSettings.SettingsStatus.Contains("Could not save"),
                 "Failed option saves must restore their old values and report the error.");
+
+            var editedDisplay = new FakeDisplay("edited");
+            var editedMonitor = new Monitor("edited", "Edited", new System.Drawing.Size(1920, 1080), 60)
+            {
+                LastBrightness = 40
+            };
+            editedMonitor.Profiles.Add(new Profile(editedMonitor, "Default", new(.5, .5, 1, .5), true, true));
+            computer.Monitors.Add(editedMonitor);
+            monitor.LastBrightness = 68;
+            other.LastBrightness = 100;
+
+            var firstRestoreAttempts = 0;
+            var startupHardware = new FakeBrightness
+            {
+                RejectWrite = display => display.DevicePath == first.DevicePath && ++firstRestoreAttempts == 1
+            };
+            startupHardware.Levels[first.DevicePath] = 9;
+            startupHardware.Levels[second.DevicePath] = 100;
+            startupHardware.Levels[editedDisplay.DevicePath] = 25;
+
+            var startupCache = new FixedDisplayCache(new[] { first, second, editedDisplay });
+            var startupPersistence = new BrightnessPersistenceController(data, startupCache, startupHardware, logger);
+            startupPersistence.Attach(computer);
+            using var flyout = new BrightnessFlyoutViewModel(startupHardware, startupCache, startupPersistence,
+                deferInitialization: false);
+            var restoreMethod = typeof(BrightnessPersistenceController).GetMethod("RestoreOnStartupAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            Pump(async () =>
+            {
+                var restore = (Task)restoreMethod.Invoke(startupPersistence, null)!;
+                var editedRow = flyout.Monitors.Single(row => row.Display == editedDisplay);
+                editedRow.Brightness = 65;
+                await editedRow.FlushPendingBrightnessAsync();
+                await restore;
+            });
+            Check(!computer.IsRememberBrightnessOnStart && firstRestoreAttempts == 2 &&
+                startupHardware.Levels[first.DevicePath] == 68,
+                "Startup restores the last slider level even with the retired setting off, and retries a busy monitor.");
+            Check(startupHardware.Levels[second.DevicePath] == 100 && startupHardware.Writes == 3,
+                "Startup must skip a display that already has the saved level and avoid writing a superseded level.");
+            Check(data.Load().Value.Monitors.Single(item => item.DisplayDevicePath == editedDisplay.DevicePath).LastBrightness == 65 &&
+                startupHardware.Levels[editedDisplay.DevicePath] == 65,
+                "A slider change during startup must take precedence on disk and on the display.");
         }
         finally
         {
@@ -216,6 +260,7 @@ internal static class BrightnessFeatureRegressionChecks
         public bool FailWrites;
         public int FailNextWrites;
         public Action? BeforeWrite;
+        public Func<Display, bool>? RejectWrite;
         public int Writes;
         public override bool SupportsBrightness(Display display) => !IsDisplaySleeping && !FailSupport.Contains(display.DevicePath);
         public override int? GetBrightness(Display display)
@@ -226,14 +271,20 @@ internal static class BrightnessFeatureRegressionChecks
         }
         public override bool SetBrightness(Display display, int brightness)
         {
-            Writes++;
+            Interlocked.Increment(ref Writes);
             BeforeWrite?.Invoke();
-            var fail = FailWrites || FailNextWrites-- > 0;
+            var fail = FailWrites || RejectWrite?.Invoke(display) == true || Interlocked.Decrement(ref FailNextWrites) >= 0;
             if (!fail) Levels[display.DevicePath] = brightness;
             RecordStatus(display, new BrightnessStatus(fail ? "Write failed" : "Applied", fail, brightness));
             return !fail;
         }
         public void ExternalStatus(Display display, BrightnessStatus status) => RecordStatus(display, status);
+    }
+
+    private sealed class FixedDisplayCache(IReadOnlyList<Display> displays) : DisplayCache
+    {
+        public override IReadOnlyList<Display> GetDisplays() => displays;
+        public override void Refresh() { }
     }
 
     internal static void Pump(Func<Task> work)

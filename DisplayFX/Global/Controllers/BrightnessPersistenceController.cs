@@ -1,22 +1,33 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using DisplayFX.Objects.Entities;
 using NLog;
 using WindowsDisplayAPI;
+using Monitor = DisplayFX.Objects.Entities.Monitor;
 
 namespace DisplayFX.Global.Controllers;
 
 /// <summary>
-///     Persists user-requested hardware brightness values and restores them
-///     before the main window is displayed.
+///     Persists user-requested hardware brightness and restores it after startup.
 /// </summary>
 public class BrightnessPersistenceController
 {
+    private static readonly TimeSpan[] StartupRestoreDelays =
+    {
+        TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15)
+    };
+
     private readonly DataController _dataController;
     private readonly DisplayCache _displayCache;
     private readonly ILogger _logger;
     private readonly MonitorBrightnessController _monitorBrightnessController;
+    private readonly Dictionary<Monitor, (int Brightness, CancellationTokenSource Cancellation)> _startupRestores = new();
     private Computer? _computer;
+    private bool _startupRestoreStarted;
 
     public BrightnessPersistenceController(
         DataController dataController,
@@ -41,6 +52,8 @@ public class BrightnessPersistenceController
 
     public void Detach()
     {
+        foreach (var restore in _startupRestores.Values)
+            restore.Cancellation.Cancel();
         _computer = null;
     }
 
@@ -71,29 +84,72 @@ public class BrightnessPersistenceController
     public int? GetRememberedBrightness(Display display) => _computer?.Monitors.FirstOrDefault(monitor =>
         string.Equals(monitor.DisplayDevicePath, display.DevicePath, StringComparison.OrdinalIgnoreCase))?.LastBrightness;
     public DisplayFX.Objects.Entities.Monitor? GetMonitor(Display display) => _computer?.Monitors.FirstOrDefault(monitor => string.Equals(monitor.DisplayDevicePath, display.DevicePath, StringComparison.OrdinalIgnoreCase));
-    public void RestoreOnStartup()
+    internal void CancelStartupRestore(Display display)
     {
-        var loadResult = _dataController.Load();
-        if (loadResult.IsFailed || !loadResult.Value.IsRememberBrightnessOnStart)
+        if (GetMonitor(display) is { } monitor && _startupRestores.TryGetValue(monitor, out var restore))
+            restore.Cancellation.Cancel();
+    }
+
+    internal async Task RestoreOnStartupAsync()
+    {
+        if (_computer is null || _startupRestoreStarted)
             return;
+
+        _startupRestoreStarted = true;
+        foreach (var monitor in _computer.Monitors)
+        {
+            if (monitor.LastBrightness is int brightness)
+                _startupRestores.Add(monitor, (brightness, new CancellationTokenSource()));
+        }
 
         try
         {
-            var displays = _displayCache.GetDisplays();
-
-            foreach (var monitor in loadResult.Value.Monitors.Where(monitor => monitor.LastBrightness.HasValue))
+            foreach (var delay in StartupRestoreDelays)
             {
-                var display = displays.FirstOrDefault(candidate =>
-                    string.Equals(candidate.DevicePath, monitor.DisplayDevicePath,
-                        StringComparison.OrdinalIgnoreCase));
+                if (_startupRestores.Count == 0)
+                    break;
 
-                if (display is not null)
-                    _monitorBrightnessController.SetBrightness(display, monitor.LastBrightness!.Value);
+                await Task.Delay(delay);
+                if (_startupRestores.Values.All(restore => restore.Cancellation.IsCancellationRequested))
+                    break;
+
+                IReadOnlyList<Display> displays;
+                try
+                {
+                    displays = await Task.Run(() =>
+                    {
+                        _displayCache.Refresh();
+                        return _displayCache.GetDisplays();
+                    });
+                }
+                catch (Exception exception)
+                {
+                    _logger.Warn(exception, "Could not enumerate displays for brightness restoration.");
+                    continue;
+                }
+
+                foreach (var (monitor, (brightness, cancellation)) in _startupRestores.ToArray())
+                {
+                    var display = displays.FirstOrDefault(candidate =>
+                        string.Equals(candidate.DevicePath, monitor.DisplayDevicePath, StringComparison.OrdinalIgnoreCase));
+                    if (!cancellation.IsCancellationRequested && (display is null || !await Task.Run(() =>
+                            _monitorBrightnessController.TryRestoreBrightness(display, brightness, cancellation.Token))))
+                        continue;
+
+                    _startupRestores.Remove(monitor);
+                    cancellation.Dispose();
+                }
             }
         }
         catch (Exception exception)
         {
             _logger.Warn(exception, "Failed to restore remembered monitor brightness.");
+        }
+        finally
+        {
+            foreach (var restore in _startupRestores.Values)
+                restore.Cancellation.Dispose();
+            _startupRestores.Clear();
         }
     }
 

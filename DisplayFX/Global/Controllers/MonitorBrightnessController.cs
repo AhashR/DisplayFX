@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using System.Threading;
 using NLog;
 using WindowsDisplayAPI;
 
@@ -112,6 +113,19 @@ public partial class MonitorBrightnessController
         var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());
         lock (channel)
             return !IsDisplaySleeping && GetVersion(display) == expectedVersion && SetBrightness(display, brightness);
+    }
+
+    internal bool TryRestoreBrightness(Display display, int brightness, CancellationToken cancellationToken)
+    {
+        var channel = _channels.GetOrAdd(display.DevicePath, _ => new Channel());
+        lock (channel)
+        {
+            if (cancellationToken.IsCancellationRequested || IsDisplaySleeping)
+                return false;
+            if (GetBrightness(display) == brightness)
+                return true;
+            return !cancellationToken.IsCancellationRequested && SetBrightness(display, brightness);
+        }
     }
 
     /// <summary>

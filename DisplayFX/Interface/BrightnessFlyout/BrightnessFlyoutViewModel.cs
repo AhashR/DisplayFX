@@ -40,12 +40,7 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
         var displays = deferInitialization ? Array.Empty<Display>() : GetConnectedDisplays();
 
         Monitors = new ObservableCollection<BrightnessMonitorViewModel>(
-            displays
-                .Select(display => new BrightnessMonitorViewModel(
-                    display,
-                    brightnessController,
-                    brightnessApplied: brightnessPersistenceController.Remember,
-                    name: brightnessPersistenceController.GetMonitorName(display), rememberedBrightness: brightnessPersistenceController.GetRememberedBrightness(display), deferInitialization: deferInitialization)));
+            displays.Select(display => CreateRow(display, deferInitialization)));
         if (_topology != null) _topology.TopologyChanged += OnTopologyChanged;
         brightnessController.DisplayPowerChanged += OnDisplayPowerChanged;
         if (deferInitialization) Initialization = InitializeDisplaysAsync();
@@ -59,12 +54,14 @@ public class BrightnessFlyoutViewModel : Screen, IDisposable
     {
         foreach (var display in displays)
             if (!Monitors.Any(row => IsSameDisplay(row.Display, display)))
-                Monitors.Add(CreateDeferredRow(display));
+                Monitors.Add(CreateRow(display, deferInitialization: true));
     }
 
-    private BrightnessMonitorViewModel CreateDeferredRow(Display display) => new(
-        display, _brightnessController, brightnessApplied: _persistence.Remember,
-        name: _persistence.GetMonitorName(display), rememberedBrightness: _persistence.GetRememberedBrightness(display), deferInitialization: true);
+    private BrightnessMonitorViewModel CreateRow(Display display, bool deferInitialization) => new(
+        display, _brightnessController,
+        brightnessChanged: (row, _) => _persistence.CancelStartupRestore(row.Display),
+        brightnessApplied: _persistence.Remember, name: _persistence.GetMonitorName(display),
+        rememberedBrightness: _persistence.GetRememberedBrightness(display), deferInitialization: deferInitialization);
 
     private static bool IsSameDisplay(Display first, Display second) =>
         string.Equals(first.DevicePath, second.DevicePath, StringComparison.OrdinalIgnoreCase);
